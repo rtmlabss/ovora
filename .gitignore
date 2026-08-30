@@ -1,0 +1,33 @@
+# dependencies
+/node_modules
+/.pnp
+.pnp.*
+
+# next.js
+/.next/
+/out/
+/build
+
+# database (SQLite lokal — di-seed otomatis di server)
+/data/
+*.db
+*.db-shm
+*.db-wal
+
+# production
+/dist
+/.vercel
+
+# misc
+*.log
+.DS_Store
+.env
+.env*.local
+
+# tooling / agent metadata lokal
+/.claude/
+/.codex/
+/.ngodingpakeai/
+
+# typescript
+*.tsbuildinfo

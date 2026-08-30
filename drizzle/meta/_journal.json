@@ -1,0 +1,62 @@
+{
+  "version": "7",
+  "dialect": "sqlite",
+  "entries": [
+    {
+      "idx": 0,
+      "version": "6",
+      "when": 1788071154169,
+      "tag": "0000_damp_callisto",
+      "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "6",
+      "when": 1788077022776,
+      "tag": "0001_sad_shaman",
+      "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "6",
+      "when": 1788081755562,
+      "tag": "0002_silly_captain_midlands",
+      "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "6",
+      "when": 1788092923911,
+      "tag": "0003_reward_winners",
+      "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "6",
+      "when": 1788094120562,
+      "tag": "0004_branches_status",
+      "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "6",
+      "when": 1788094760380,
+      "tag": "0005_branch_stocks",
+      "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "6",
+      "when": 1788098758563,
+      "tag": "0006_users_branch_status",
+      "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "6",
+      "when": 1788100310181,
+      "tag": "0007_store_profiles",
+      "breakpoints": true
+    }
+  ]
+}

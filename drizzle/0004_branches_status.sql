@@ -1,0 +1,1 @@
+ALTER TABLE `branches` ADD `status` text DEFAULT 'aktif' NOT NULL;
