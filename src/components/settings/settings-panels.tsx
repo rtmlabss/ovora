@@ -1,7 +1,9 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import { BuildingIcon, CheckIcon, MailIcon, MapPinIcon, SettingsIcon, UserPlusIcon, WhatsAppIcon } from "@/components/icons";
 import { MOCK_ACCOUNTS, MOCK_BRANCH_SETTINGS, MOCK_PREFERENCES, MOCK_STORE_PROFILE } from "@/lib/settings";
+import type { StoreProfile } from "@/lib/settings";
 
 function Card({
   title,
@@ -42,36 +44,92 @@ function Field({ label, value }: { label: string; value: string }) {
 }
 
 export function ProfileSettings() {
-  const profile = MOCK_STORE_PROFILE;
+  const [profile, setProfile] = useState<StoreProfile | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    fetch("/api/store-profile")
+      .then((r) => r.json())
+      .then((d) => {
+        if (cancelled) return;
+        if (d?.profile) setProfile(d.profile);
+        else setError("Gagal memuat profil toko.");
+      })
+      .catch(() => {
+        if (!cancelled) setError("Tidak dapat terhubung ke server.");
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const p = profile ?? MOCK_STORE_PROFILE;
   return (
     <Card
       title="Profil Toko"
       desc="Informasi dasar toko & kontak"
       icon={<SettingsIcon width={18} height={18} />}
     >
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-        <Field label="Nama Toko" value={profile.name} />
-        <Field label="Pemilik" value={profile.owner} />
-        <Field label="Telepon" value={profile.phone} />
-        <Field label="Email" value={profile.email} />
-        <Field label="WhatsApp" value={profile.whatsapp} />
-        <Field label="Mata Uang" value={profile.currency} />
-      </div>
+      {profile === null && !error ? (
+        <div className="space-y-3">
+          {[0, 1, 2].map((i) => (
+            <div key={i} className="h-9 animate-pulse rounded-lg bg-muted" />
+          ))}
+        </div>
+      ) : (
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+          <Field label="Nama Toko" value={p.name} />
+          <Field label="Tagline" value={p.tagline} />
+          <Field label="Telepon" value={p.phone} />
+          <Field label="Mata Uang" value={p.currency} />
+        </div>
+      )}
       <div className="mt-4">
         <label className="mb-1 block text-xs font-medium text-muted-foreground">Alamat</label>
         <div className="flex items-start gap-2 rounded-lg border border-border bg-background px-3 py-2 text-sm text-foreground">
           <MapPinIcon width={14} height={14} className="mt-0.5 shrink-0 text-muted-foreground" />
-          {profile.address}, {profile.city}
+          {profile ? `${p.address}, ${p.city}` : "—"}
         </div>
       </div>
+      {error ? <p className="mt-4 text-[11px] text-error">{error}</p> : null}
       <p className="mt-4 text-[11px] text-muted-foreground">
-        Data tiruan untuk profil toko sampai API pengaturan tersedia.
+        Profil toko dimuat dari database.
       </p>
     </Card>
   );
 }
 
+interface ApiBranch {
+  id: number;
+  name: string;
+  address: string | null;
+  city: string | null;
+  status: "aktif" | "libur";
+}
+
 export function BranchSettings() {
+  const [branches, setBranches] = useState<ApiBranch[] | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    fetch("/api/branches")
+      .then((r) => r.json())
+      .then((d) => {
+        if (cancelled) return;
+        if (Array.isArray(d?.branches)) setBranches(d.branches);
+        else setError("Gagal memuat cabang.");
+      })
+      .catch(() => {
+        if (!cancelled) setError("Tidak dapat terhubung ke server.");
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const rows = branches ?? MOCK_BRANCH_SETTINGS;
   return (
     <Card
       title="Cabang Toko"
@@ -88,11 +146,11 @@ export function BranchSettings() {
             </tr>
           </thead>
           <tbody>
-            {MOCK_BRANCH_SETTINGS.map((b) => (
+            {rows.map((b) => (
               <tr key={b.id} className="border-b border-border/60 last:border-0">
                 <td className="py-2.5 pr-3 font-medium text-foreground">{b.name}</td>
                 <td className="py-2.5 pr-3 text-sm text-muted-foreground">
-                  {b.address}, {b.city}
+                  {b.address ? `${b.address}, ${b.city ?? ""}` : "—"}
                 </td>
                 <td className="py-2.5 text-center">
                   <span
@@ -110,25 +168,48 @@ export function BranchSettings() {
           </tbody>
         </table>
       </div>
+      {error ? <p className="mt-3 text-[11px] text-error">{error}</p> : null}
     </Card>
   );
 }
 
+interface ApiUser {
+  id: number;
+  name: string;
+  email: string;
+  role: "Pemilik" | "Manager" | "Kasir";
+  branch: string | null;
+  status: "aktif" | "nonaktif";
+}
+
 export function AccountSettings() {
+  const [users, setUsers] = useState<ApiUser[] | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    fetch("/api/users")
+      .then((r) => r.json())
+      .then((d) => {
+        if (cancelled) return;
+        if (Array.isArray(d?.users)) setUsers(d.users);
+        else setError("Gagal memuat pengguna.");
+      })
+      .catch(() => {
+        if (!cancelled) setError("Tidak dapat terhubung ke server.");
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const rows = users ?? MOCK_ACCOUNTS;
   return (
     <Card
       title="Akun Pengguna"
       desc="Pengelolaan akses kasir & manager"
       icon={<UserPlusIcon width={18} height={18} />}
     >
-      <div className="mb-3 flex justify-end">
-        <button
-          type="button"
-          className="inline-flex items-center gap-1.5 rounded-lg bg-primary px-3 py-1.5 text-sm font-semibold text-primary-foreground transition-colors hover:bg-primary/90"
-        >
-          <UserPlusIcon width={14} height={14} /> Tambah Akun
-        </button>
-      </div>
       <div className="overflow-x-auto">
         <table className="w-full text-sm">
           <thead>
@@ -138,16 +219,15 @@ export function AccountSettings() {
               <th className="py-2 pr-3 font-medium">Peran</th>
               <th className="py-2 pr-3 font-medium">Cabang</th>
               <th className="py-2 pr-3 text-center font-medium">Status</th>
-              <th className="py-2 text-right font-medium">Terakhir Aktif</th>
             </tr>
           </thead>
           <tbody>
-            {MOCK_ACCOUNTS.map((u) => (
+            {rows.map((u) => (
               <tr key={u.id} className="border-b border-border/60 last:border-0">
                 <td className="py-2.5 pr-3 font-medium text-foreground">{u.name}</td>
                 <td className="py-2.5 pr-3 text-muted-foreground">{u.email}</td>
                 <td className="py-2.5 pr-3 text-foreground">{u.role}</td>
-                <td className="py-2.5 pr-3 text-muted-foreground">{u.branch}</td>
+                <td className="py-2.5 pr-3 text-muted-foreground">{u.branch ?? "—"}</td>
                 <td className="py-2.5 text-center">
                   <span
                     className={`rounded-full px-2 py-0.5 text-[10px] font-semibold ${
@@ -159,12 +239,12 @@ export function AccountSettings() {
                     {u.status}
                   </span>
                 </td>
-                <td className="py-2.5 text-right text-muted-foreground">{u.lastActive}</td>
               </tr>
             ))}
           </tbody>
         </table>
       </div>
+      {error ? <p className="mt-3 text-[11px] text-error">{error}</p> : null}
     </Card>
   );
 }
@@ -203,7 +283,7 @@ export function NotificationPreferences() {
         </div>
       </div>
       <p className="mt-4 text-[11px] text-muted-foreground">
-        Preferensi ini memakai data tiruan sampai API pengaturan tersedia.
+        Preferensi aplikasi belum memiliki penyimpanan di database.
       </p>
     </Card>
   );

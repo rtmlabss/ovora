@@ -130,7 +130,7 @@ export default function HakAksesPage() {
           ) : null}
 
           <p className="mt-3 text-[11px] text-muted-foreground">
-            Matriks hak akses memakai data tiruan sampai API pengaturan tersedia.
+            Matriks hak akses mengikuti konfigurasi peran aplikasi.
           </p>
         </div>
 

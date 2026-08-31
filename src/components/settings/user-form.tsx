@@ -2,24 +2,31 @@
 
 import { useState } from "react";
 import { CheckIcon, XIcon } from "@/components/icons";
-import { MOCK_BRANCH_SETTINGS, type AccountUser } from "@/lib/settings";
+import type { AccountUser } from "@/lib/settings";
+
+export interface ApiBranch {
+  id: number;
+  name: string;
+}
 
 const ROLES = ["Pemilik", "Manager", "Kasir"] as const;
 
 export interface UserFormValues {
   name: string;
   email: string;
+  password: string;
   role: (typeof ROLES)[number];
-  branch: string;
+  branchId: number | null;
   status: "aktif" | "nonaktif";
 }
 
-export function emptyUser(): UserFormValues {
+export function emptyUser(branches: ApiBranch[]): UserFormValues {
   return {
     name: "",
     email: "",
+    password: "",
     role: "Kasir",
-    branch: MOCK_BRANCH_SETTINGS[0].name,
+    branchId: branches[0]?.id ?? null,
     status: "aktif",
   };
 }
@@ -28,8 +35,9 @@ export function toFormValues(user: AccountUser): UserFormValues {
   return {
     name: user.name,
     email: user.email,
+    password: "",
     role: user.role as typeof ROLES[number],
-    branch: user.branch,
+    branchId: user.branchId,
     status: user.status,
   };
 }
@@ -37,11 +45,13 @@ export function toFormValues(user: AccountUser): UserFormValues {
 export function UserForm({
   mode,
   initial,
+  branches,
   onCancel,
   onSave,
 }: {
   mode: "tambah" | "ubah";
   initial: UserFormValues;
+  branches: ApiBranch[];
   onCancel: () => void;
   onSave: (values: UserFormValues) => void;
 }) {
@@ -61,6 +71,10 @@ export function UserForm({
     }
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(values.email.trim())) {
       setError("Email tidak valid");
+      return;
+    }
+    if (mode === "tambah" && values.password.length < 6) {
+      setError("Kata sandi minimal 6 karakter");
       return;
     }
     onSave({ ...values, name: values.name.trim(), email: values.email.trim() });
@@ -104,6 +118,17 @@ export function UserForm({
           className="mb-4 w-full rounded-lg border border-border bg-background px-3 py-2 text-sm outline-none focus:border-primary"
         />
 
+        <label className="mb-1 block text-sm font-medium text-foreground">
+          {mode === "tambah" ? "Kata Sandi" : "Kata Sandi Baru (opsional)"}
+        </label>
+        <input
+          type="password"
+          value={values.password}
+          onChange={(e) => update("password", e.target.value)}
+          placeholder="Minimal 6 karakter"
+          className="mb-4 w-full rounded-lg border border-border bg-background px-3 py-2 text-sm outline-none focus:border-primary"
+        />
+
         <div className="mb-4 grid grid-cols-1 gap-4 sm:grid-cols-2">
           <div>
             <label className="mb-1 block text-sm font-medium text-foreground">Peran</label>
@@ -122,12 +147,13 @@ export function UserForm({
           <div>
             <label className="mb-1 block text-sm font-medium text-foreground">Cabang</label>
             <select
-              value={values.branch}
-              onChange={(e) => update("branch", e.target.value)}
+              value={values.branchId ?? ""}
+              onChange={(e) => update("branchId", e.target.value ? Number(e.target.value) : null)}
               className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm outline-none focus:border-primary"
             >
-              {MOCK_BRANCH_SETTINGS.map((b) => (
-                <option key={b.id} value={b.name}>
+              <option value="">Semua Cabang</option>
+              {branches.map((b) => (
+                <option key={b.id} value={b.id}>
                   {b.name}
                 </option>
               ))}

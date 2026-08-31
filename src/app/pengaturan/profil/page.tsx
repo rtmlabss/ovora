@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import AppShell from "@/components/app-shell";
 import {
   BuildingIcon,
@@ -10,32 +10,90 @@ import {
   MapPinIcon,
   SettingsIcon,
 } from "@/components/icons";
-import { MOCK_BRANCH_SETTINGS, MOCK_STORE_PROFILE } from "@/lib/settings";
+import type { StoreProfile } from "@/lib/settings";
+
+interface BranchRow {
+  id: number;
+  name: string;
+  address: string | null;
+  city: string | null;
+  status: "aktif" | "libur";
+}
+
+const EMPTY_PROFILE: StoreProfile = {
+  name: "",
+  tagline: "",
+  phone: "",
+  address: "",
+  city: "",
+  currency: "IDR",
+  description: "",
+};
 
 export default function ProfilTokoPage() {
-  const [profile, setProfile] = useState(MOCK_STORE_PROFILE);
+  const [profile, setProfile] = useState<StoreProfile | null>(null);
+  const [branches, setBranches] = useState<BranchRow[] | null>(null);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [saved, setSaved] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
 
-  function update(key: keyof typeof MOCK_STORE_PROFILE, value: string) {
-    setProfile((prev) => ({ ...prev, [key]: value }));
+  useEffect(() => {
+    let cancelled = false;
+    Promise.all([
+      fetch("/api/store-profile").then((r) => r.json()),
+      fetch("/api/branches").then((r) => r.json()),
+    ])
+      .then(([pd, bd]) => {
+        if (cancelled) return;
+        setProfile(pd?.profile ? { ...EMPTY_PROFILE, ...pd.profile } : EMPTY_PROFILE);
+        if (Array.isArray(bd?.branches)) setBranches(bd.branches);
+        else setBranches([]);
+      })
+      .catch(() => {
+        if (!cancelled) setLoadError("Tidak dapat terhubung ke server.");
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  function update(key: keyof StoreProfile, value: string) {
+    setProfile((prev) => (prev ? { ...prev, [key]: value } : prev));
     setSaved(false);
+    setSaveError(null);
   }
 
-  function handleSave(event: React.FormEvent) {
+  async function handleSave(event: React.FormEvent) {
     event.preventDefault();
-    setSaved(true);
-    setTimeout(() => setSaved(false), 2000);
+    if (!profile) return;
+    setSaveError(null);
+    try {
+      const res = await fetch("/api/store-profile", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(profile),
+      });
+      const d = await res.json();
+      if (!res.ok) {
+        setSaveError(d?.error ?? "Gagal menyimpan profil toko.");
+        return;
+      }
+      if (d?.profile) setProfile({ ...EMPTY_PROFILE, ...d.profile });
+      setSaved(true);
+      setTimeout(() => setSaved(false), 2000);
+    } catch {
+      setSaveError("Tidak dapat terhubung ke server.");
+    }
   }
 
-  const fields: { key: keyof typeof MOCK_STORE_PROFILE; label: string }[] = [
+  const fields: { key: keyof StoreProfile; label: string; cols2?: boolean }[] = [
     { key: "name", label: "Nama Toko" },
-    { key: "owner", label: "Pemilik" },
+    { key: "tagline", label: "Tagline" },
     { key: "phone", label: "Telepon" },
-    { key: "email", label: "Email" },
-    { key: "whatsapp", label: "WhatsApp" },
+    { key: "currency", label: "Mata Uang" },
     { key: "address", label: "Alamat" },
     { key: "city", label: "Kota" },
-    { key: "currency", label: "Mata Uang" },
+    { key: "description", label: "Deskripsi", cols2: true },
   ];
 
   return (
@@ -63,41 +121,35 @@ export default function ProfilTokoPage() {
             </div>
 
             <form onSubmit={handleSave} className="space-y-4">
-              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-                {fields.slice(0, 6).map((f) => (
-                  <div key={f.key}>
-                    <label className="mb-1 block text-xs font-medium text-muted-foreground">
-                      {f.label}
-                    </label>
-                    <input
-                      type="text"
-                      value={profile[f.key]}
-                      onChange={(e) => update(f.key, e.target.value)}
-                      className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm outline-none focus:border-primary"
-                    />
-                  </div>
-                ))}
-              </div>
-              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-                {fields.slice(6).map((f) => (
-                  <div key={f.key}>
-                    <label className="mb-1 block text-xs font-medium text-muted-foreground">
-                      {f.label}
-                    </label>
-                    <input
-                      type="text"
-                      value={profile[f.key]}
-                      onChange={(e) => update(f.key, e.target.value)}
-                      className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm outline-none focus:border-primary"
-                    />
-                  </div>
-                ))}
-              </div>
+              {profile === null ? (
+                <div className="space-y-3">
+                  {[0, 1, 2, 3, 4, 5].map((i) => (
+                    <div key={i} className="h-9 animate-pulse rounded-lg bg-muted" />
+                  ))}
+                </div>
+              ) : (
+                <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                  {fields.map((f) => (
+                    <div key={f.key} className={f.cols2 ? "sm:col-span-2" : ""}>
+                      <label className="mb-1 block text-xs font-medium text-muted-foreground">
+                        {f.label}
+                      </label>
+                      <input
+                        type="text"
+                        value={profile[f.key as keyof typeof EMPTY_PROFILE] ?? ""}
+                        onChange={(e) => update(f.key, e.target.value)}
+                        className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm outline-none focus:border-primary"
+                      />
+                    </div>
+                  ))}
+                </div>
+              )}
 
               <div className="flex items-center gap-3 pt-1">
                 <button
                   type="submit"
-                  className="inline-flex items-center gap-1.5 rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground transition-colors hover:bg-primary/90"
+                  disabled={profile === null}
+                  className="inline-flex items-center gap-1.5 rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground transition-colors hover:bg-primary/90 disabled:opacity-50"
                 >
                   <CheckIcon width={14} height={14} /> Simpan Perubahan
                 </button>
@@ -107,11 +159,20 @@ export default function ProfilTokoPage() {
                   </span>
                 ) : null}
               </div>
+              {saveError ? (
+                <p className="rounded-lg bg-error/10 px-3 py-2 text-xs font-medium text-error">
+                  {saveError}
+                </p>
+              ) : null}
             </form>
 
-            <p className="mt-4 text-[11px] text-muted-foreground">
-              Data tiruan untuk profil toko sampai API pengaturan tersedia.
-            </p>
+            {loadError ? (
+              <p className="mt-4 text-[11px] text-error">{loadError}</p>
+            ) : (
+              <p className="mt-4 text-[11px] text-muted-foreground">
+                Profil toko dimuat & disimpan ke database.
+              </p>
+            )}
           </section>
 
           <section className="rounded-xl border border-border bg-card p-5 shadow-sm">
@@ -128,33 +189,45 @@ export default function ProfilTokoPage() {
             </div>
 
             <div className="space-y-3">
-              {MOCK_BRANCH_SETTINGS.map((b) => (
-                <div
-                  key={b.id}
-                  className="rounded-lg border border-border bg-background p-3"
-                >
-                  <div className="flex items-center justify-between gap-3">
-                    <p className="font-medium text-foreground">{b.name}</p>
-                    <span
-                      className={`rounded-full px-2 py-0.5 text-[10px] font-semibold ${
-                        b.status === "aktif"
-                          ? "bg-success/15 text-success"
-                          : "bg-muted text-muted-foreground"
-                      }`}
-                    >
-                      {b.status}
-                    </span>
-                  </div>
-                  <p className="mt-1 flex items-center gap-1 text-xs text-muted-foreground">
-                    <MapPinIcon width={11} height={11} />
-                    {b.address}, {b.city}
-                  </p>
+              {branches === null ? (
+                <div className="space-y-3">
+                  {[0, 1, 2].map((i) => (
+                    <div key={i} className="h-12 animate-pulse rounded-lg bg-muted" />
+                  ))}
                 </div>
-              ))}
+              ) : branches.length === 0 ? (
+                <p className="py-4 text-center text-sm text-muted-foreground">
+                  Belum ada cabang.
+                </p>
+              ) : (
+                branches.map((b) => (
+                  <div
+                    key={b.id}
+                    className="rounded-lg border border-border bg-background p-3"
+                  >
+                    <div className="flex items-center justify-between gap-3">
+                      <p className="font-medium text-foreground">{b.name}</p>
+                      <span
+                        className={`rounded-full px-2 py-0.5 text-[10px] font-semibold ${
+                          b.status === "aktif"
+                            ? "bg-success/15 text-success"
+                            : "bg-muted text-muted-foreground"
+                        }`}
+                      >
+                        {b.status}
+                      </span>
+                    </div>
+                    <p className="mt-1 flex items-center gap-1 text-xs text-muted-foreground">
+                      <MapPinIcon width={11} height={11} />
+                      {b.address ? `${b.address}, ${b.city ?? ""}` : "—"}
+                    </p>
+                  </div>
+                ))
+              )}
             </div>
 
             <p className="mt-4 text-[11px] text-muted-foreground">
-              Data tiruan untuk daftar cabang sampai API pengaturan tersedia.
+              Daftar cabang dimuat dari database.
             </p>
           </section>
         </div>

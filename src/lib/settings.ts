@@ -1,12 +1,12 @@
 export interface StoreProfile {
   name: string;
-  owner: string;
+  tagline: string;
   phone: string;
-  email: string;
-  whatsapp: string;
   address: string;
   city: string;
   currency: string;
+  description: string;
+  updatedAt?: string;
 }
 
 export interface BranchSetting {
@@ -23,6 +23,7 @@ export interface AccountUser {
   email: string;
   role: "Pemilik" | "Manager" | "Kasir";
   branch: string;
+  branchId: number | null;
   status: "aktif" | "nonaktif";
   lastActive: string;
 }
@@ -39,13 +40,12 @@ export interface AppPreference {
 
 export const MOCK_STORE_PROFILE: StoreProfile = {
   name: "ovora.id — Toko Telur",
-  owner: "Pemilik Toko",
+  tagline: "Telur segar pilihan setiap hari",
   phone: "0812-3456-7890",
-  email: "pemilik@ovora.id",
-  whatsapp: "0812-3456-7890",
   address: "Jl. Raya Telur No. 1",
   city: "Kota",
-  currency: "IDR (Rp)",
+  currency: "IDR",
+  description: "Pemasok telur berkualitas untuk retail & pelanggan setia.",
 };
 
 export const MOCK_BRANCH_SETTINGS: BranchSetting[] = [
@@ -61,6 +61,7 @@ export const MOCK_ACCOUNTS: AccountUser[] = [
     email: "pemilik@ovora.id",
     role: "Pemilik",
     branch: "Semua Cabang",
+    branchId: null,
     status: "aktif",
     lastActive: "Baru saja",
   },
@@ -70,6 +71,7 @@ export const MOCK_ACCOUNTS: AccountUser[] = [
     email: "nina@ovora.id",
     role: "Manager",
     branch: "Toko Utama",
+    branchId: 1,
     status: "aktif",
     lastActive: "10 menit lalu",
   },
@@ -79,6 +81,7 @@ export const MOCK_ACCOUNTS: AccountUser[] = [
     email: "andi@ovora.id",
     role: "Kasir",
     branch: "Toko Cabang Panciro",
+    branchId: 2,
     status: "aktif",
     lastActive: "1 jam lalu",
   },
@@ -88,6 +91,7 @@ export const MOCK_ACCOUNTS: AccountUser[] = [
     email: "dewi@ovora.id",
     role: "Kasir",
     branch: "Toko Cabang Delta",
+    branchId: 3,
     status: "nonaktif",
     lastActive: "3 hari lalu",
   },
