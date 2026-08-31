@@ -1,11 +1,8 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
+import { useMemo } from "react";
 import { TrendingUpIcon } from "@/components/icons";
-import {
-  MOCK_SALES_BY_PERIOD,
-  SALES_PERIOD_KEYS,
-} from "@/lib/monitoring";
 import { rupiah } from "@/lib/pos";
 
 function fmtDate(key: string) {
@@ -13,46 +10,93 @@ function fmtDate(key: string) {
   return `${new Date(y, m - 1, 1).toLocaleDateString("id-ID", { month: "long", year: "numeric" })}`;
 }
 
+function currentMonthKey() {
+  return new Date().toISOString().slice(0, 7);
+}
+
+function genPeriodKeys(): string[] {
+  const keys: string[] = [];
+  const now = new Date();
+  for (let i = 0; i < 6; i++) {
+    const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+    keys.push(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`);
+  }
+  return keys;
+}
+
 interface ComparisonRow {
   branchId: number;
   branchName: string;
   revenue: number;
-  transactions: number;
   otherRevenue: number;
+  transactions: number;
   otherTransactions: number;
   diffRevenue: number;
   diffTransactions: number;
 }
 
-interface ComparisonData {
-  period: string;
-  branches: ComparisonRow[];
-}
-
 export function SalesComparison() {
-  const [periodA, setPeriodA] = useState<string>("2026-07");
-  const [periodB, setPeriodB] = useState<string>("2026-08");
+  const [periods] = useState<string[]>(() => genPeriodKeys());
+  const [periodA, setPeriodA] = useState<string>(() => genPeriodKeys()[1]);
+  const [periodB, setPeriodB] = useState<string>(() => genPeriodKeys()[0]);
+  const [rows, setRows] = useState<ComparisonRow[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
-  const data: ComparisonData | undefined = useMemo(() => {
-    if (periodA === periodB) return undefined;
-    const a = MOCK_SALES_BY_PERIOD[periodA];
-    const b = MOCK_SALES_BY_PERIOD[periodB];
-    if (!a || !b) return undefined;
-    const branches: ComparisonRow[] = a.branches.map((row) => {
-      const other = b.branches.find((r) => r.branchId === row.branchId);
-      return {
-        branchId: row.branchId,
-        branchName: row.branchName,
-        revenue: row.revenue,
-        transactions: row.transactions,
-        otherRevenue: other?.revenue ?? 0,
-        otherTransactions: other?.transactions ?? 0,
-        diffRevenue: row.revenue - (other?.revenue ?? 0),
-        diffTransactions: row.transactions - (other?.transactions ?? 0),
-      };
-    });
-    return { period: a.period, branches };
-  }, [periodA, periodB]);
+  const data = useMemo(
+    () => (periodA === periodB ? undefined : { periodA, periodB, rows }),
+    [periodA, periodB, rows]
+  );
+
+  const load = useCallback(
+    (a: string, b: string) => {
+      if (a === b) {
+        setRows([]);
+        return;
+      }
+      setLoading(true);
+      setError(null);
+      fetch("/api/branches")
+        .then((res) => {
+          if (!res.ok) throw new Error("Gagal memuat cabang");
+          return res.json();
+        })
+        .then(async (json) => {
+          const branchList: Array<{ id: number; name: string }> = json.branches ?? [];
+          const results = await Promise.all(
+            branchList.map(async (br) => {
+              try {
+                const r = await fetch(
+                  `/api/branches/${br.id}/sales-comparison?from=${a}&to=${b}`
+                ).then((res) => (res.ok ? res.json() : null));
+                const from = r?.from ?? { totalSales: 0, totalTransactions: 0 };
+                const to = r?.to ?? { totalSales: 0, totalTransactions: 0 };
+                return {
+                  branchId: br.id,
+                  branchName: br.name,
+                  revenue: from.totalSales,
+                  otherRevenue: to.totalSales,
+                  transactions: from.totalTransactions,
+                  otherTransactions: to.totalTransactions,
+                  diffRevenue: to.totalSales - from.totalSales,
+                  diffTransactions: to.totalTransactions - from.totalTransactions,
+                } as ComparisonRow;
+              } catch {
+                return null;
+              }
+            })
+          );
+          setRows(results.filter((r): r is ComparisonRow => r !== null));
+        })
+        .catch((err: Error) => setError(err.message))
+        .finally(() => setLoading(false));
+    },
+    []
+  );
+
+  useEffect(() => {
+    load(periodA, periodB);
+  }, [load, periodA, periodB]);
 
   return (
     <section
@@ -72,7 +116,7 @@ export function SalesComparison() {
             onChange={(e) => setPeriodA(e.target.value)}
             className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm outline-none focus:border-primary"
           >
-            {SALES_PERIOD_KEYS.map((k) => (
+            {periods.map((k) => (
               <option key={k} value={k}>
                 {fmtDate(k)}
               </option>
@@ -86,7 +130,7 @@ export function SalesComparison() {
             onChange={(e) => setPeriodB(e.target.value)}
             className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm outline-none focus:border-primary"
           >
-            {SALES_PERIOD_KEYS.map((k) => (
+            {periods.map((k) => (
               <option key={k} value={k}>
                 {fmtDate(k)}
               </option>
@@ -95,7 +139,15 @@ export function SalesComparison() {
         </div>
       </div>
 
-      {data ? (
+      {loading ? (
+        <div className="mt-4 space-y-2">
+          {[0, 1, 2].map((i) => (
+            <div key={i} className="h-10 animate-pulse rounded-lg bg-muted/30" />
+          ))}
+        </div>
+      ) : error ? (
+        <p className="mt-4 rounded-lg bg-error/10 px-3 py-2 text-sm text-error">{error}</p>
+      ) : data ? (
         <div className="mt-4 overflow-x-auto">
           <table className="w-full text-sm">
             <thead>
@@ -108,7 +160,7 @@ export function SalesComparison() {
               </tr>
             </thead>
             <tbody>
-              {data.branches.map((row) => (
+              {data.rows.map((row) => (
                 <tr key={row.branchId} className="border-b border-border/60 last:border-0">
                   <td className="py-2.5 pr-3 font-medium text-foreground">{row.branchName}</td>
                   <td className="py-2.5 pr-3 text-foreground">{rupiah.format(row.revenue)}</td>
@@ -139,15 +191,17 @@ export function SalesComparison() {
               ))}
             </tbody>
           </table>
+          {data.rows.length === 0 && (
+            <p className="mt-4 rounded-lg bg-muted/20 py-6 text-center text-sm text-muted-foreground">
+              Tidak ada data penjualan untuk periode ini
+            </p>
+          )}
         </div>
       ) : (
         <p className="mt-4 rounded-lg bg-muted/20 py-6 text-center text-sm text-muted-foreground">
           Pilih dua periode yang berbeda untuk membandingkan penjualan.
         </p>
       )}
-      <p className="mt-3 text-[11px] text-muted-foreground">
-        Data pembanding memakai data tiruan sampai API monitoring selesai.
-      </p>
     </section>
   );
 }
