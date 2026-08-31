@@ -17,10 +17,6 @@ const MEMBER_SEED = [
   { name: "Jane Smith", phone: "081298765432", email: "jane@example.com", pointsBalance: 85 },
 ];
 
-function isoDate(date: Date) {
-  return date.toISOString();
-}
-
 function pad(n: number, width = 2) {
   return String(n).padStart(width, "0");
 }
@@ -32,34 +28,33 @@ function invoiceNo(date: Date, seq: number) {
   return `INV-${y}${m}${d}-${pad(seq, 3)}`;
 }
 
-export function seedIfEmpty(db: DB) {
-  const [{ value: branchCount }] = db.select({ value: count() }).from(branches).all();
+export async function seedIfEmpty(db: DB) {
+  const [{ value: branchCount }] = await db.select({ value: count() }).from(branches);
   if (branchCount > 0) return;
 
-  const branchId = db
-    .insert(branches)
-    .values({ name: "Toko Utama", address: "Jl. Raya Telur No. 1", city: "Kota" })
-    .returning({ id: branches.id })
-    .get().id;
+  const branchId = (
+    await db
+      .insert(branches)
+      .values({ name: "Toko Utama", address: "Jl. Raya Telur No. 1", city: "Kota" })
+      .returning({ id: branches.id })
+  )[0].id;
 
-  db.insert(branches)
+  await db.insert(branches)
     .values([      { name: "Toko Cabang Panciro", address: "Jl. Merdeka No. 12", city: "Kota A", status: "aktif" },
       { name: "Toko Cabang Delta", address: "Jl. Pemuda No. 3", city: "Kota B", status: "libur" },
     ])
-    .returning({ id: branches.id, name: branches.name })
-    .all();
+    .returning({ id: branches.id, name: branches.name });
 
-  const productIds = db
-    .insert(products)
-    .values(PRODUCT_SEED.map((p) => ({ branchId, ...p })))
-    .returning({ id: products.id })
-    .all()
-    .map((r) => r.id);
+  const productIds = (
+    await db
+      .insert(products)
+      .values(PRODUCT_SEED.map((p) => ({ branchId, ...p })))
+      .returning({ id: products.id })
+  ).map((r) => r.id);
 
-  const branchRows = db
+  const branchRows = await db
     .select({ id: branches.id, name: branches.name })
-    .from(branches)
-    .all();
+    .from(branches);
   const branchStockRows: Array<{ branchId: number; productId: number; stockQty: number; minStock: number }> = [];
   const base = [45, 12, 20, 8, 30, 6];
   for (const b of branchRows) {
@@ -72,20 +67,19 @@ export function seedIfEmpty(db: DB) {
       });
     });
   }
-  db.insert(branchStocks).values(branchStockRows).run();
+  await db.insert(branchStocks).values(branchStockRows);
 
-  insertDefaultUsers(db, branchRows);
+  await insertDefaultUsers(db, branchRows);
 
-  const memberRows = db
+  const memberRows = await db
     .insert(members)
     .values(MEMBER_SEED.map((m) => ({ branchId, ...m })))
-    .returning({ id: members.id })
-    .all();
+    .returning({ id: members.id });
 
   const now = new Date();
   const iso = (date: Date) => date.toISOString();
 
-  db.insert(pointMovements)
+  await db.insert(pointMovements)
     .values([
       {
         memberId: memberRows[0].id,
@@ -119,10 +113,9 @@ export function seedIfEmpty(db: DB) {
         note: "Transaksi INV-20260829-018",
         createdAt: iso(new Date(now.getFullYear(), now.getMonth(), now.getDate() - 1, 9, 5)),
       },
-    ])
-    .run();
+    ]);
 
-  db.insert(financialTransactions)
+  await db.insert(financialTransactions)
     .values({
       branchId,
       type: "pengeluaran",
@@ -130,10 +123,9 @@ export function seedIfEmpty(db: DB) {
       amount: 1_200_000,
       note: "Belanja telur dari peternak hari ini",
       createdAt: new Date(now.getFullYear(), now.getMonth(), now.getDate(), 7, 30).toISOString(),
-    })
-    .run();
+    });
 
-  db.insert(stockMovements)
+  await db.insert(stockMovements)
     .values([
       {
         branchId,
@@ -159,8 +151,7 @@ export function seedIfEmpty(db: DB) {
         note: "Stok rusak saat packing",
         createdAt: new Date(now.getFullYear(), now.getMonth(), now.getDate(), 15, 5).toISOString(),
       },
-    ])
-    .run();
+    ]);
 
   let seq = 1;
   for (const b of branchRows) {
@@ -196,24 +187,25 @@ export function seedIfEmpty(db: DB) {
         const pointsDiscount = pointsUsed * 100;
         const total = Math.max(subtotal - discount - pointsDiscount, 0);
 
-        const txn = db
-          .insert(transactions)
-          .values({
-            invoiceNo: `INV-${at.getFullYear()}${pad(at.getMonth() + 1)}${pad(at.getDate())}-${pad(seq, 3)}`,
-            branchId: b.id,
-            memberId: useMember ? bMemberRows[i % bMemberRows.length].id : null,
-            subtotal,
-            discount,
-            pointsUsed,
-            total,
-            paymentMethod: i % 3 === 2 ? "qris" : "tunai",
-            createdAt: at.toISOString(),
-          })
-          .returning({ id: transactions.id })
-          .get();
+        const txn = (
+          await db
+            .insert(transactions)
+            .values({
+              invoiceNo: `INV-${at.getFullYear()}${pad(at.getMonth() + 1)}${pad(at.getDate())}-${pad(seq, 3)}`,
+              branchId: b.id,
+              memberId: useMember ? bMemberRows[i % bMemberRows.length].id : null,
+              subtotal,
+              discount,
+              pointsUsed,
+              total,
+              paymentMethod: i % 3 === 2 ? "qris" : "tunai",
+              createdAt: at.toISOString(),
+            })
+            .returning({ id: transactions.id })
+        )[0];
         seq += 1;
 
-        db.insert(transactionItems)
+        await db.insert(transactionItems)
           .values(
             picks.map((pick) => {
               const product = PRODUCT_SEED[bProducts.indexOf(pick.productId)];
@@ -225,23 +217,23 @@ export function seedIfEmpty(db: DB) {
                 subtotal: product.price * pick.qty,
               };
             })
-          )
-          .run();
+          );
       }
     }
   }
 
-  const rewardId = db
-    .insert(rewards)
-    .values({
-      period: "2026-07",
-      title: "Reward Juli 2026",
-      createdAt: iso(new Date(now.getFullYear(), now.getMonth() - 1, 26)),
-    })
-    .returning({ id: rewards.id })
-    .get().id;
+  const rewardId = (
+    await db
+      .insert(rewards)
+      .values({
+        period: "2026-07",
+        title: "Reward Juli 2026",
+        createdAt: iso(new Date(now.getFullYear(), now.getMonth() - 1, 26)),
+      })
+      .returning({ id: rewards.id })
+  )[0].id;
 
-  db.insert(rewardWinners)
+  await db.insert(rewardWinners)
     .values([
       {
         rewardId,
@@ -259,10 +251,9 @@ export function seedIfEmpty(db: DB) {
         status: "dijadwalkan",
         createdAt: iso(new Date(now.getFullYear(), now.getMonth() - 1, 27)),
       },
-    ])
-    .run();
+    ]);
 
-  db.insert(storeProfiles)
+  await db.insert(storeProfiles)
     .values({
       name: "Toko Telur ovora",
       tagline: "Telur segar pilihan setiap hari",
@@ -272,11 +263,10 @@ export function seedIfEmpty(db: DB) {
       currency: "IDR",
       description: "Pemasok telur berkualitas untuk retail & pelanggan setia.",
       updatedAt: iso(new Date()),
-    })
-    .run();
+    });
 }
 
-function insertDefaultUsers(db: DB, branchRows: Array<{ id: number; name: string }>) {
+async function insertDefaultUsers(db: DB, branchRows: Array<{ id: number; name: string }>) {
   const seededAt = new Date().toISOString();
   const firstId = branchRows[0]?.id;
   if (!firstId) return;
@@ -286,12 +276,12 @@ function insertDefaultUsers(db: DB, branchRows: Array<{ id: number; name: string
     { name: "Andi Kasir", email: "andi@ovora.id", passwordHash: hashPassword("ovora123"), role: "Kasir", status: "aktif", branchId: firstId, createdAt: seededAt },
     { name: "Sari Kasir", email: "sari@ovora.id", passwordHash: hashPassword("ovora123"), role: "Kasir", status: "nonaktif", branchId: branchRows[1]?.id ?? firstId, createdAt: seededAt },
   ];
-  db.insert(users).values(userRows).run();
+  await db.insert(users).values(userRows);
 }
 
-export function seedDefaultUsers(db: DB) {
-  const [{ value: userCount }] = db.select({ value: count() }).from(users).all();
+export async function seedDefaultUsers(db: DB) {
+  const [{ value: userCount }] = await db.select({ value: count() }).from(users);
   if (userCount > 0) return;
-  const rows = db.select({ id: branches.id, name: branches.name }).from(branches).all();
-  insertDefaultUsers(db, rows);
+  const rows = await db.select({ id: branches.id, name: branches.name }).from(branches);
+  await insertDefaultUsers(db, rows);
 }

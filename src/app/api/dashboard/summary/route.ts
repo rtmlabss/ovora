@@ -4,11 +4,11 @@ import { getDashboardData, parseRange } from "@/lib/dashboard";
 export const dynamic = "force-dynamic";
 
 export async function GET(request: Request) {
-  const db = ensureDb();
+  const db = await ensureDb();
   const { searchParams } = new URL(request.url);
   const range = parseRange(searchParams.get("range"));
 
-  const data = getDashboardData(db, range, new Date());
+  const data = await getDashboardData(db, range, new Date());
 
   return Response.json({
     range,

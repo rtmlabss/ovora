@@ -6,8 +6,9 @@ import { storeProfiles } from "@/db/schema";
 export const dynamic = "force-dynamic";
 
 export async function GET() {
-  const db = ensureDb();
-  const row = db.select().from(storeProfiles).limit(1).get();
+  const db = await ensureDb();
+  const rows = await db.select().from(storeProfiles).limit(1);
+  const row = rows[0];
   if (!row) {
     return NextResponse.json({
       profile: {
@@ -46,8 +47,9 @@ export async function PUT(request: Request) {
   if (!nameStr) return NextResponse.json({ error: "name wajib diisi" }, { status: 400 });
 
   const now = new Date().toISOString();
-  const db = ensureDb();
-  const existing = db.select({ id: storeProfiles.id }).from(storeProfiles).limit(1).get();
+  const db = await ensureDb();
+  const existingRows = await db.select({ id: storeProfiles.id }).from(storeProfiles).limit(1);
+  const existing = existingRows[0];
   const values = {
     name: nameStr,
     tagline: tagline === undefined || tagline === null ? null : String(tagline),
@@ -60,11 +62,12 @@ export async function PUT(request: Request) {
   };
 
   if (existing) {
-    db.update(storeProfiles).set(values).where(eq(storeProfiles.id, existing.id)).run();
+    await db.update(storeProfiles).set(values).where(eq(storeProfiles.id, existing.id));
   } else {
-    db.insert(storeProfiles).values(values).run();
+    await db.insert(storeProfiles).values(values);
   }
 
-  const row = db.select().from(storeProfiles).limit(1).get();
+  const rows = await db.select().from(storeProfiles).limit(1);
+  const row = rows[0];
   return NextResponse.json({ profile: row, ok: true });
 }

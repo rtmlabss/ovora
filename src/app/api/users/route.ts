@@ -18,9 +18,9 @@ export async function GET(request: Request) {
   const q = (searchParams.get("q") ?? "").trim().toLowerCase();
   const limit = Math.min(Math.max(Number(searchParams.get("limit") ?? 100) || 100, 1), 500);
 
-  const db = ensureDb();
+  const db = await ensureDb();
 
-  const rows = db
+  const rows = await db
     .select({
       id: users.id,
       name: users.name,
@@ -33,8 +33,7 @@ export async function GET(request: Request) {
     })
     .from(users)
     .leftJoin(branches, eq(branches.id, users.branchId))
-    .limit(limit)
-    .all();
+    .limit(limit);
 
   let filtered = rows;
   if (role && ROLES.includes(role)) filtered = filtered.filter((r) => r.role === role);
@@ -101,20 +100,22 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "branchId tidak valid" }, { status: 400 });
   }
 
-  const db = ensureDb();
+  const db = await ensureDb();
 
   if (bId !== null) {
-    const branch = db.select({ id: branches.id }).from(branches).where(eq(branches.id, bId)).get();
+    const branchRows = await db.select({ id: branches.id }).from(branches).where(eq(branches.id, bId)).limit(1);
+    const branch = branchRows[0];
     if (!branch) return NextResponse.json({ error: "Cabang tidak ditemukan" }, { status: 404 });
   }
 
-  const exists = db.select({ id: users.id }).from(users).where(eq(users.email, emailStr)).get();
+  const existsRows = await db.select({ id: users.id }).from(users).where(eq(users.email, emailStr)).limit(1);
+  const exists = existsRows[0];
   if (exists) {
     return NextResponse.json({ error: "Email sudah digunakan" }, { status: 409 });
   }
 
   const createdAt = new Date().toISOString();
-  const row = db
+  const rows = await db
     .insert(users)
     .values({
       name: nameStr,
@@ -125,8 +126,8 @@ export async function POST(request: Request) {
       branchId: bId,
       createdAt,
     })
-    .returning({ id: users.id, name: users.name, email: users.email, role: users.role, status: users.status, branchId: users.branchId })
-    .get();
+    .returning({ id: users.id, name: users.name, email: users.email, role: users.role, status: users.status, branchId: users.branchId });
+  const row = rows[0];
 
   return NextResponse.json({ user: { ...row, branch: null, createdAt }, ok: true }, { status: 201 });
 }

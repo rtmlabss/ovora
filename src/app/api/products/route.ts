@@ -5,7 +5,7 @@ import { products } from "@/db/schema";
 export const dynamic = "force-dynamic";
 
 export async function GET(request: Request) {
-  const db = ensureDb();
+  const db = await ensureDb();
   const { searchParams } = new URL(request.url);
   const q = searchParams.get("q")?.trim() ?? "";
   const branchId = Number(searchParams.get("branchId")) || 1;
@@ -20,7 +20,7 @@ export async function GET(request: Request) {
     );
   }
 
-  const rows = db.select().from(products).where(and(...conditions)).all();
+  const rows = await db.select().from(products).where(and(...conditions));
 
   return Response.json({
     products: rows.map((p) => ({

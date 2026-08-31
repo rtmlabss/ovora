@@ -7,7 +7,7 @@ export const dynamic = "force-dynamic";
 
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
-  const db = ensureDb();
+  const db = await ensureDb();
 
   const branchId = searchParams.get("branchId");
   const q = searchParams.get("q");
@@ -29,13 +29,12 @@ export async function GET(request: Request) {
 
   const limitNum = Math.min(Math.max(Number(limit) || 100, 1), 500);
 
-  const rows = db
+  const rows = await db
     .select()
     .from(members)
     .where(conditions.length ? and(...conditions) : undefined)
     .orderBy(desc(members.pointsBalance), asc(members.id))
-    .limit(limitNum)
-    .all();
+    .limit(limitNum);
 
   return NextResponse.json({ count: rows.length, members: rows });
 }
@@ -68,20 +67,21 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Poin awal harus angka bulat >= 0" }, { status: 400 });
   }
 
-  const db = ensureDb();
+  const db = await ensureDb();
 
   const branchIdNum = Number(branchId);
-  const row = db
-    .insert(members)
-    .values({
-      branchId: Number.isInteger(branchIdNum) && branchIdNum > 0 ? branchIdNum : 1,
-      name: name.trim(),
-      phone: phone.trim(),
-      email: typeof email === "string" && email.trim() ? email.trim() : null,
-      pointsBalance: pointsNum,
-    })
-    .returning()
-    .get();
+  const row = (
+    await db
+      .insert(members)
+      .values({
+        branchId: Number.isInteger(branchIdNum) && branchIdNum > 0 ? branchIdNum : 1,
+        name: name.trim(),
+        phone: phone.trim(),
+        email: typeof email === "string" && email.trim() ? email.trim() : null,
+        pointsBalance: pointsNum,
+      })
+      .returning()
+  )[0];
 
   return NextResponse.json({ member: row }, { status: 201 });
 }

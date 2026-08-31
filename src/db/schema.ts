@@ -1,15 +1,15 @@
-import { integer, real, sqliteTable, text, unique } from "drizzle-orm/sqlite-core";
+import { integer, pgTable, real, serial, text, uniqueIndex } from "drizzle-orm/pg-core";
 
-export const branches = sqliteTable("branches", {
-  id: integer("id").primaryKey({ autoIncrement: true }),
+export const branches = pgTable("branches", {
+  id: serial("id").primaryKey(),
   name: text("name").notNull(),
   address: text("address"),
   city: text("city"),
   status: text("status").notNull().default("aktif"),
 });
 
-export const users = sqliteTable("users", {
-  id: integer("id").primaryKey({ autoIncrement: true }),
+export const users = pgTable("users", {
+  id: serial("id").primaryKey(),
   name: text("name").notNull(),
   email: text("email").notNull().unique(),
   passwordHash: text("password_hash").notNull(),
@@ -19,8 +19,8 @@ export const users = sqliteTable("users", {
   createdAt: text("created_at").notNull(),
 });
 
-export const storeProfiles = sqliteTable("store_profiles", {
-  id: integer("id").primaryKey({ autoIncrement: true }),
+export const storeProfiles = pgTable("store_profiles", {
+  id: serial("id").primaryKey(),
   name: text("name").notNull(),
   tagline: text("tagline"),
   address: text("address"),
@@ -31,8 +31,8 @@ export const storeProfiles = sqliteTable("store_profiles", {
   updatedAt: text("updated_at").notNull(),
 });
 
-export const products = sqliteTable("products", {
-  id: integer("id").primaryKey({ autoIncrement: true }),
+export const products = pgTable("products", {
+  id: serial("id").primaryKey(),
   branchId: integer("branch_id").notNull(),
   name: text("name").notNull(),
   unit: text("unit").notNull(),
@@ -41,8 +41,8 @@ export const products = sqliteTable("products", {
   minStock: real("min_stock").notNull().default(0),
 });
 
-export const members = sqliteTable("members", {
-  id: integer("id").primaryKey({ autoIncrement: true }),
+export const members = pgTable("members", {
+  id: serial("id").primaryKey(),
   branchId: integer("branch_id").notNull(),
   name: text("name").notNull(),
   phone: text("phone"),
@@ -50,8 +50,8 @@ export const members = sqliteTable("members", {
   pointsBalance: integer("points_balance").notNull().default(0),
 });
 
-export const transactions = sqliteTable("transactions", {
-  id: integer("id").primaryKey({ autoIncrement: true }),
+export const transactions = pgTable("transactions", {
+  id: serial("id").primaryKey(),
   invoiceNo: text("invoice_no").notNull().unique(),
   branchId: integer("branch_id").notNull(),
   memberId: integer("member_id"),
@@ -64,8 +64,8 @@ export const transactions = sqliteTable("transactions", {
   createdAt: text("created_at").notNull(),
 });
 
-export const transactionItems = sqliteTable("transaction_items", {
-  id: integer("id").primaryKey({ autoIncrement: true }),
+export const transactionItems = pgTable("transaction_items", {
+  id: serial("id").primaryKey(),
   transactionId: integer("transaction_id").notNull(),
   productId: integer("product_id").notNull(),
   qty: real("qty").notNull(),
@@ -73,8 +73,8 @@ export const transactionItems = sqliteTable("transaction_items", {
   subtotal: real("subtotal").notNull(),
 });
 
-export const financialTransactions = sqliteTable("financial_transactions", {
-  id: integer("id").primaryKey({ autoIncrement: true }),
+export const financialTransactions = pgTable("financial_transactions", {
+  id: serial("id").primaryKey(),
   branchId: integer("branch_id").notNull(),
   type: text("type").notNull(),
   category: text("category").notNull(),
@@ -85,8 +85,8 @@ export const financialTransactions = sqliteTable("financial_transactions", {
   createdAt: text("created_at").notNull(),
 });
 
-export const stockMovements = sqliteTable("stock_movements", {
-  id: integer("id").primaryKey({ autoIncrement: true }),
+export const stockMovements = pgTable("stock_movements", {
+  id: serial("id").primaryKey(),
   branchId: integer("branch_id").notNull(),
   productId: integer("product_id").notNull(),
   type: text("type").notNull(),
@@ -96,22 +96,22 @@ export const stockMovements = sqliteTable("stock_movements", {
   createdAt: text("created_at").notNull(),
 });
 
-export const branchStocks = sqliteTable(
+export const branchStocks = pgTable(
   "branch_stocks",
   {
-    id: integer("id").primaryKey({ autoIncrement: true }),
+    id: serial("id").primaryKey(),
     branchId: integer("branch_id").notNull(),
     productId: integer("product_id").notNull(),
     stockQty: real("stock_qty").notNull().default(0),
     minStock: real("min_stock").notNull().default(0),
   },
   (t) => ({
-    uniq: unique().on(t.branchId, t.productId),
+    uniq: uniqueIndex("branch_stocks_branch_product_uniq").on(t.branchId, t.productId),
   })
 );
 
-export const pointMovements = sqliteTable("point_movements", {
-  id: integer("id").primaryKey({ autoIncrement: true }),
+export const pointMovements = pgTable("point_movements", {
+  id: serial("id").primaryKey(),
   memberId: integer("member_id").notNull(),
   branchId: integer("branch_id").notNull(),
   kind: text("kind").notNull(),
@@ -122,15 +122,15 @@ export const pointMovements = sqliteTable("point_movements", {
   createdAt: text("created_at").notNull(),
 });
 
-export const rewards = sqliteTable("rewards", {
-  id: integer("id").primaryKey({ autoIncrement: true }),
+export const rewards = pgTable("rewards", {
+  id: serial("id").primaryKey(),
   period: text("period").notNull().unique(),
   title: text("title").notNull(),
   createdAt: text("created_at").notNull(),
 });
 
-export const rewardWinners = sqliteTable("reward_winners", {
-  id: integer("id").primaryKey({ autoIncrement: true }),
+export const rewardWinners = pgTable("reward_winners", {
+  id: serial("id").primaryKey(),
   rewardId: integer("reward_id")
     .notNull()
     .references(() => rewards.id),

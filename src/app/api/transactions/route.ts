@@ -34,7 +34,7 @@ function pad(n: number, width = 2) {
 }
 
 export async function POST(request: Request) {
-  const db = ensureDb();
+  const db = await ensureDb();
   let body: PostSaleBody;
   try {
     body = (await request.json()) as PostSaleBody;
@@ -60,19 +60,21 @@ export async function POST(request: Request) {
     body.paymentMethod === "qris" || body.paymentMethod === "transfer" ? body.paymentMethod : "tunai";
 
   try {
-    const sale = db.transaction((tx) => {
-      const productRows = body.items.map((item) => {
-        const product = tx.select().from(products).where(eq(products.id, item.productId)).get();
+    const sale = await db.transaction(async (tx) => {
+      const productRows: { product: typeof products.$inferSelect; qty: number; unitPrice: number }[] = [];
+      for (const item of body.items) {
+        const productQuery = await tx.select().from(products).where(eq(products.id, item.productId)).limit(1);
+        const product = productQuery[0];
         if (!product) throw new Error(`Produk ID ${item.productId} tidak ditemukan`);
         if (item.qty > product.stockQty) {
           throw new Error(`Stok ${product.name} tidak cukup (tersisa ${product.stockQty} ${product.unit})`);
         }
-        return {
+        productRows.push({
           product,
           qty: item.qty,
           unitPrice: product.price,
-        };
-      });
+        });
+      }
 
       const subtotal = productRows.reduce(
         (sum, r) => sum + Math.round(r.unitPrice * r.qty),
@@ -81,9 +83,10 @@ export async function POST(request: Request) {
       const safeDiscount = Math.min(discount, subtotal);
 
       let maxPoints = Math.floor((subtotal - safeDiscount) / POINT_VALUE);
-      let member = null;
+      let member: (typeof members.$inferSelect) | null = null;
       if (memberId) {
-        member = tx.select().from(members).where(eq(members.id, memberId)).get();
+        const memberQuery = await tx.select().from(members).where(eq(members.id, memberId)).limit(1);
+        member = memberQuery[0] ?? null;
         if (member) {
           maxPoints = Math.min(maxPoints, member.pointsBalance);
         }
@@ -93,11 +96,11 @@ export async function POST(request: Request) {
       const total = Math.max(subtotal - safeDiscount - pointsDiscount, 0);
 
       const now = new Date();
-      const maxRow = tx.select({ id: transactions.id }).from(transactions).orderBy(desc(transactions.id)).limit(1).all();
-      const seq = (maxRow[0]?.id ?? 0) + 1;
+      const maxRows = await tx.select({ id: transactions.id }).from(transactions).orderBy(desc(transactions.id)).limit(1);
+      const seq = (maxRows[0]?.id ?? 0) + 1;
       const invoiceNo = `INV-${now.getFullYear()}${pad(now.getMonth() + 1)}${pad(now.getDate())}-${String(seq).padStart(3, "0")}`;
 
-      const txn = tx
+      const txnRows = await tx
         .insert(transactions)
         .values({
           invoiceNo,
@@ -110,35 +113,32 @@ export async function POST(request: Request) {
           paymentMethod,
           createdAt: now.toISOString(),
         })
-        .returning({ id: transactions.id, invoiceNo: transactions.invoiceNo })
-        .get();
+        .returning({ id: transactions.id, invoiceNo: transactions.invoiceNo });
+      const txn = txnRows[0];
 
       for (const row of productRows) {
-        tx.insert(transactionItems)
+        await tx.insert(transactionItems)
           .values({
             transactionId: txn.id,
             productId: row.product.id,
             qty: row.qty,
             price: row.unitPrice,
             subtotal: Math.round(row.unitPrice * row.qty),
-          })
-          .run();
-        tx.update(products)
+          });
+        await tx.update(products)
           .set({ stockQty: row.product.stockQty - row.qty })
-          .where(eq(products.id, row.product.id))
-          .run();
+          .where(eq(products.id, row.product.id));
       }
 
       let pointsEarned = 0;
       if (member) {
         pointsEarned = Math.floor(total / 1000);
-        tx.update(members)
+        await tx.update(members)
           .set({ pointsBalance: member.pointsBalance - pointsUsed + pointsEarned })
-          .where(eq(members.id, member.id))
-          .run();
+          .where(eq(members.id, member.id));
       }
 
-      tx.insert(financialTransactions)
+      await tx.insert(financialTransactions)
         .values({
           branchId,
           type: "pemasukan",
@@ -147,8 +147,7 @@ export async function POST(request: Request) {
           note: `Transaksi ${invoiceNo}`,
           transactionId: txn.id,
           createdAt: now.toISOString(),
-        })
-        .run();
+        });
 
       return {
         id: txn.id,
@@ -183,7 +182,7 @@ export async function POST(request: Request) {
 }
 
 export async function GET(request: Request) {
-  const db = ensureDb();
+  const db = await ensureDb();
   const { searchParams } = new URL(request.url);
   const branchId = Number(searchParams.get("branchId")) || 1;
   const from = searchParams.get("from") ?? null;
@@ -194,33 +193,31 @@ export async function GET(request: Request) {
   if (from) filters.push(gte(transactions.createdAt, from));
   if (to) filters.push(lte(transactions.createdAt, to));
 
-  const rows = db
+  const rows = await db
     .select()
     .from(transactions)
     .where(and(...filters))
     .orderBy(desc(transactions.createdAt))
-    .limit(limit)
-    .all();
+    .limit(limit);
 
   const ids = rows.map((r) => r.id);
 
   const items = ids.length
-    ? db
+    ? await db
         .select()
         .from(transactionItems)
         .where(inArray(transactionItems.transactionId, ids))
-        .all()
     : [];
 
   const productIds = [...new Set(items.map((i) => i.productId))];
   const productsFound = productIds.length
-    ? db.select().from(products).where(inArray(products.id, productIds)).all()
+    ? await db.select().from(products).where(inArray(products.id, productIds))
     : [];
   const productMap = new Map(productsFound.map((p) => [p.id, p]));
 
   const memberIds = [...new Set(rows.flatMap((r) => (r.memberId != null ? [r.memberId] : [])))];
   const membersFound = memberIds.length
-    ? db.select().from(members).where(inArray(members.id, memberIds)).all()
+    ? await db.select().from(members).where(inArray(members.id, memberIds))
     : [];
   const memberMap = new Map(membersFound.map((m) => [m.id, m]));
 

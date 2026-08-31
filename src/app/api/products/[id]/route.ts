@@ -26,18 +26,20 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
     return NextResponse.json({ error: "Batas minimum harus angka >= 0" }, { status: 400 });
   }
 
-  const db = ensureDb();
-  const existing = db.select().from(products).where(eq(products.id, id)).get();
+  const db = await ensureDb();
+  const existingRows = await db.select().from(products).where(eq(products.id, id)).limit(1);
+  const existing = existingRows[0];
   if (!existing) {
     return NextResponse.json({ error: "Produk tidak ditemukan" }, { status: 404 });
   }
 
-  const updated = db
-    .update(products)
-    .set({ minStock: minStockNum })
-    .where(eq(products.id, id))
-    .returning()
-    .get();
+  const updated = (
+    await db
+      .update(products)
+      .set({ minStock: minStockNum })
+      .where(eq(products.id, id))
+      .returning()
+  )[0];
 
   return NextResponse.json(
     {

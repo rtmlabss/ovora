@@ -19,23 +19,21 @@ export async function GET(request: Request) {
     return NextResponse.json({ error: "limit harus 1-500" }, { status: 400 });
   }
 
-  const db = ensureDb();
+  const db = await ensureDb();
 
   const rewardRows = period
-    ? db
+    ? await db
         .select({ id: rewards.id, period: rewards.period, title: rewards.title, createdAt: rewards.createdAt })
         .from(rewards)
         .where(eq(rewards.period, period))
         .orderBy(desc(rewards.period))
-        .all()
-    : db
+    : await db
         .select({ id: rewards.id, period: rewards.period, title: rewards.title, createdAt: rewards.createdAt })
         .from(rewards)
         .orderBy(desc(rewards.period))
-        .limit(limit)
-        .all();
+        .limit(limit);
 
-  const winnerRows = db
+  const winnerRows = await db
     .select({
       id: rewardWinners.id,
       rewardId: rewardWinners.rewardId,
@@ -48,8 +46,7 @@ export async function GET(request: Request) {
     })
     .from(rewardWinners)
     .innerJoin(members, eq(members.id, rewardWinners.memberId))
-    .orderBy(asc(rewardWinners.rank))
-    .all();
+    .orderBy(asc(rewardWinners.rank));
 
   const winnersByReward = new Map<number, typeof winnerRows>();
   for (const row of winnerRows) {

@@ -34,9 +34,10 @@ export async function POST(request: Request) {
 
   const noteStr = typeof note === "string" && note.trim() ? note.trim() : null;
 
-  const db = ensureDb();
+  const db = await ensureDb();
 
-  const existing = db.select().from(members).where(eq(members.id, memberIdNum)).get();
+  const existingRows = await db.select().from(members).where(eq(members.id, memberIdNum)).limit(1);
+  const existing = existingRows[0];
   if (!existing) {
     return NextResponse.json({ error: "Member tidak ditemukan" }, { status: 404 });
   }
@@ -56,15 +57,14 @@ export async function POST(request: Request) {
   const transactionIdValue =
     Number.isInteger(transactionIdNum) && transactionIdNum > 0 ? transactionIdNum : null;
 
-  const result = db.transaction((tx) => {
-    tx.update(members)
+  const result = await db.transaction(async (tx) => {
+    await tx.update(members)
       .set({
         pointsBalance: sql`${members.pointsBalance} - ${pointsNum}`,
       })
-      .where(eq(members.id, memberIdNum))
-      .run();
+      .where(eq(members.id, memberIdNum));
 
-    const movement = tx
+    const movements = await tx
       .insert(pointMovements)
       .values({
         memberId: memberIdNum,
@@ -75,10 +75,11 @@ export async function POST(request: Request) {
         transactionId: transactionIdValue,
         createdAt: new Date().toISOString(),
       })
-      .returning()
-      .get();
+      .returning();
+    const movement = movements[0];
 
-    const updated = tx.select().from(members).where(eq(members.id, memberIdNum)).get();
+    const updatedRows = await tx.select().from(members).where(eq(members.id, memberIdNum)).limit(1);
+    const updated = updatedRows[0];
 
     return { movement, member: updated };
   });

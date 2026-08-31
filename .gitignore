@@ -29,5 +29,8 @@
 /.codex/
 /.ngodingpakeai/
 
+# supabase CLI lokal (berisi .temp dengan connection string/password)
+/supabase/
+
 # typescript
 *.tsbuildinfo

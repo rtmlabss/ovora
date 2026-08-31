@@ -1,10 +1,11 @@
 import { defineConfig } from "drizzle-kit";
 
 export default defineConfig({
-  dialect: "sqlite",
+  dialect: "postgresql",
   schema: "./src/db/schema.ts",
   out: "./drizzle",
   dbCredentials: {
-    url: "data/ovora.db",
+    url: process.env.DIRECT_URL ?? "",
+    ssl: true,
   },
 });

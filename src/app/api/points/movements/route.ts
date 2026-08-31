@@ -7,7 +7,7 @@ export const dynamic = "force-dynamic";
 
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
-  const db = ensureDb();
+  const db = await ensureDb();
 
   const memberId = searchParams.get("memberId");
   const kind = searchParams.get("kind");
@@ -26,7 +26,7 @@ export async function GET(request: Request) {
 
   const limitNum = Math.min(Math.max(Number(limit) || 100, 1), 500);
 
-  const rows = db
+  const rows = await db
     .select({
       id: pointMovements.id,
       memberId: pointMovements.memberId,
@@ -42,8 +42,7 @@ export async function GET(request: Request) {
     .leftJoin(members, eq(pointMovements.memberId, members.id))
     .where(conditions.length ? and(...conditions) : undefined)
     .orderBy(sql`${pointMovements.kind} IS 'penukaran'`, desc(pointMovements.createdAt), asc(pointMovements.id))
-    .limit(limitNum)
-    .all();
+    .limit(limitNum);
 
   return NextResponse.json({ count: rows.length, pointMovements: rows });
 }

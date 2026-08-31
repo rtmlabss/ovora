@@ -25,9 +25,10 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Email dan kata sandi wajib diisi" }, { status: 400 });
   }
 
-  const db = ensureDb();
+  const db = await ensureDb();
 
-  const row = db.select().from(users).where(eq(users.email, emailStr)).get();
+  const rows = await db.select().from(users).where(eq(users.email, emailStr)).limit(1);
+  const row = rows[0];
 
   let user: Omit<AuthClaims, "exp">;
   if (row) {
@@ -39,7 +40,7 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Akun dinonaktifkan" }, { status: 403 });
     }
     const branch = row.branchId
-      ? db.select({ name: branches.name }).from(branches).where(eq(branches.id, row.branchId)).get()
+      ? (await db.select({ name: branches.name }).from(branches).where(eq(branches.id, row.branchId)).limit(1))[0]
       : null;
     user = {
       uid: row.id,

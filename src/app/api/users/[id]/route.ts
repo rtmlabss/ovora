@@ -20,22 +20,24 @@ export async function GET(_request: Request, { params }: { params: Promise<{ id:
   const id = parseId(raw);
   if (!id) return NextResponse.json({ error: "id tidak valid" }, { status: 400 });
 
-  const db = ensureDb();
-  const row = db
-    .select({
-      id: users.id,
-      name: users.name,
-      email: users.email,
-      role: users.role,
-      status: users.status,
-      branchId: users.branchId,
-      branchName: branches.name,
-      createdAt: users.createdAt,
-    })
-    .from(users)
-    .leftJoin(branches, eq(branches.id, users.branchId))
-    .where(eq(users.id, id))
-    .get();
+  const db = await ensureDb();
+  const row = (
+    await db
+      .select({
+        id: users.id,
+        name: users.name,
+        email: users.email,
+        role: users.role,
+        status: users.status,
+        branchId: users.branchId,
+        branchName: branches.name,
+        createdAt: users.createdAt,
+      })
+      .from(users)
+      .leftJoin(branches, eq(branches.id, users.branchId))
+      .where(eq(users.id, id))
+      .limit(1)
+  )[0];
 
   if (!row) return NextResponse.json({ error: "Pengguna tidak ditemukan" }, { status: 404 });
 
@@ -74,8 +76,8 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
     branchId?: unknown;
   };
 
-  const db = ensureDb();
-  const existing = db.select().from(users).where(eq(users.id, id)).get();
+  const db = await ensureDb();
+  const [existing] = await db.select().from(users).where(eq(users.id, id)).limit(1);
   if (!existing) return NextResponse.json({ error: "Pengguna tidak ditemukan" }, { status: 404 });
 
   const patch: Partial<typeof existing> = {};
@@ -89,7 +91,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
   if (email !== undefined) {
     const v = String(email).trim().toLowerCase();
     if (!EMAIL_RE.test(v)) return NextResponse.json({ error: "Email tidak valid" }, { status: 400 });
-    const dup = db.select({ id: users.id }).from(users).where(eq(users.email, v)).get();
+    const [dup] = await db.select({ id: users.id }).from(users).where(eq(users.email, v)).limit(1);
     if (dup && dup.id !== id) return NextResponse.json({ error: "Email sudah digunakan" }, { status: 409 });
     patch.email = v;
   }
@@ -118,7 +120,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
       return NextResponse.json({ error: "branchId tidak valid" }, { status: 400 });
     }
     if (v !== null) {
-      const branch = db.select({ id: branches.id }).from(branches).where(eq(branches.id, v)).get();
+      const [branch] = await db.select({ id: branches.id }).from(branches).where(eq(branches.id, v)).limit(1);
       if (!branch) return NextResponse.json({ error: "Cabang tidak ditemukan" }, { status: 404 });
     }
     patch.branchId = v;
@@ -128,23 +130,25 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
     return NextResponse.json({ error: "Tidak ada data yang diubah" }, { status: 400 });
   }
 
-  db.update(users).set(patch).where(eq(users.id, id)).run();
+  await db.update(users).set(patch).where(eq(users.id, id));
 
-  const row = db
-    .select({
-      id: users.id,
-      name: users.name,
-      email: users.email,
-      role: users.role,
-      status: users.status,
-      branchId: users.branchId,
-      branchName: branches.name,
-      createdAt: users.createdAt,
-    })
-    .from(users)
-    .leftJoin(branches, eq(branches.id, users.branchId))
-    .where(eq(users.id, id))
-    .get();
+  const row = (
+    await db
+      .select({
+        id: users.id,
+        name: users.name,
+        email: users.email,
+        role: users.role,
+        status: users.status,
+        branchId: users.branchId,
+        branchName: branches.name,
+        createdAt: users.createdAt,
+      })
+      .from(users)
+      .leftJoin(branches, eq(branches.id, users.branchId))
+      .where(eq(users.id, id))
+      .limit(1)
+  )[0];
 
   return NextResponse.json({
     user: {
@@ -166,10 +170,10 @@ export async function DELETE(_request: Request, { params }: { params: Promise<{ 
   const id = parseId(raw);
   if (!id) return NextResponse.json({ error: "id tidak valid" }, { status: 400 });
 
-  const db = ensureDb();
-  const existing = db.select({ id: users.id }).from(users).where(eq(users.id, id)).get();
+  const db = await ensureDb();
+  const [existing] = await db.select({ id: users.id }).from(users).where(eq(users.id, id)).limit(1);
   if (!existing) return NextResponse.json({ error: "Pengguna tidak ditemukan" }, { status: 404 });
 
-  db.delete(users).where(eq(users.id, id)).run();
+  await db.delete(users).where(eq(users.id, id));
   return NextResponse.json({ ok: true });
 }

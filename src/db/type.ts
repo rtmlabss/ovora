@@ -1,4 +1,4 @@
-import type { BetterSQLite3Database } from "drizzle-orm/better-sqlite3";
+import type { PostgresJsDatabase } from "drizzle-orm/postgres-js";
 import * as schema from "@/db/schema";
 
-export type DB = BetterSQLite3Database<typeof schema>;
+export type DB = PostgresJsDatabase<typeof schema>;

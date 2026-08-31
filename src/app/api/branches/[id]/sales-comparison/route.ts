@@ -29,16 +29,17 @@ export async function GET(
     return NextResponse.json({ error: "to wajib format YYYY-MM" }, { status: 400 });
   }
 
-  const db = ensureDb();
+  const db = await ensureDb();
 
-  const branch = db.select().from(branches).where(eq(branches.id, branchId)).get();
+  const branchRows = await db.select().from(branches).where(eq(branches.id, branchId)).limit(1);
+  const branch = branchRows[0];
   if (!branch) {
     return NextResponse.json({ error: "Cabang tidak ditemukan" }, { status: 404 });
   }
 
-  const agg = (period: string) => {
+  const agg = async (period: string) => {
     const { start, end } = monthRange(period);
-    const rows = db
+    const rows = await db
       .select({
         totalSales: sql<number>`COALESCE(SUM(${transactions.total}), 0)`,
         totalTransactions: sql<number>`COALESCE(COUNT(*), 0)`,
@@ -50,8 +51,7 @@ export async function GET(
           gte(transactions.createdAt, start),
           lt(transactions.createdAt, end)
         )
-      )
-      .all();
+      );
     const r = rows[0];
     return {
       period,
@@ -60,8 +60,8 @@ export async function GET(
     };
   };
 
-  const from = agg(fromPeriod);
-  const to = agg(toPeriod);
+  const from = await agg(fromPeriod);
+  const to = await agg(toPeriod);
 
   const salesDelta = from.totalSales === 0 ? null : to.totalSales - from.totalSales;
   const salesPct =

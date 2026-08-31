@@ -11,21 +11,22 @@ const STATUSES = ["aktif", "libur"];
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
   const branchIdRaw = searchParams.get("branchId");
-  const db = ensureDb();
+  const db = await ensureDb();
 
   if (branchIdRaw) {
     const id = Number(branchIdRaw);
     if (!Number.isInteger(id) || id <= 0) {
       return NextResponse.json({ error: "branchId tidak valid" }, { status: 400 });
     }
-    const row = db.select().from(branches).where(eq(branches.id, id)).get();
+    const rows = await db.select().from(branches).where(eq(branches.id, id)).limit(1);
+    const row = rows[0];
     if (!row) {
       return NextResponse.json({ error: "Cabang tidak ditemukan" }, { status: 404 });
     }
     return NextResponse.json({ branch: row });
   }
 
-  const rows = db
+  const rows = await db
     .select({
       id: branches.id,
       name: branches.name,
@@ -35,8 +36,7 @@ export async function GET(request: Request) {
       productCount: sql<number>`(SELECT COUNT(*) FROM ${sql.raw("products")} WHERE branch_id = ${branches.id})`,
     })
     .from(branches)
-    .orderBy(asc(branches.id))
-    .all();
+    .orderBy(asc(branches.id));
 
   return NextResponse.json({ branches: rows });
 }
@@ -67,17 +67,18 @@ export async function POST(request: Request) {
     );
   }
 
-  const db = ensureDb();
-  const row = db
-    .insert(branches)
-    .values({
-      name: name.trim(),
-      address: address === undefined || address === null ? null : String(address),
-      city: city === undefined || city === null ? null : String(city),
-      status: newStatus,
-    })
-    .returning()
-    .get();
+  const db = await ensureDb();
+  const row = (
+    await db
+      .insert(branches)
+      .values({
+        name: name.trim(),
+        address: address === undefined || address === null ? null : String(address),
+        city: city === undefined || city === null ? null : String(city),
+        status: newStatus,
+      })
+      .returning()
+  )[0];
 
   return NextResponse.json({ branch: row }, { status: 201 });
 }

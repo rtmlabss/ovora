@@ -1,37 +1,41 @@
-import Database from "better-sqlite3";
-import { mkdirSync } from "node:fs";
-import { drizzle } from "drizzle-orm/better-sqlite3";
-import { migrate } from "drizzle-orm/better-sqlite3/migrator";
+import postgres from "postgres";
+import { drizzle } from "drizzle-orm/postgres-js";
+import { migrate } from "drizzle-orm/postgres-js/migrator";
 import * as schema from "@/db/schema";
 import { seedDefaultUsers, seedIfEmpty } from "@/db/seed";
 import type { DB } from "@/db/type";
 
-const globalForDb = globalThis as unknown as { _ovoraDb?: Database.Database; _ovoraSeed?: boolean };
+const globalForDb = globalThis as unknown as { _ovoraClient?: postgres.Sql; _ovoraSeed?: boolean };
 
-mkdirSync("data", { recursive: true });
-const sqlite = globalForDb._ovoraDb ?? new Database("data/ovora.db");
-if (process.env.NODE_ENV !== "production") globalForDb._ovoraDb = sqlite;
+const connectionString = process.env.DATABASE_URL;
 
-sqlite.pragma("journal_mode = WAL");
+const client = globalForDb._ovoraClient
+  ?? postgres(connectionString!, { ssl: "require", max: 10 });
+if (process.env.NODE_ENV !== "production") globalForDb._ovoraClient = client;
 
-const db = (drizzle(sqlite, { schema }) as unknown) as DB;
+const db = (drizzle(client, { schema }) as unknown) as DB;
 
-export function initSchema() {
-  migrate(db, { migrationsFolder: "drizzle" });
-  seedIfEmpty(db);
-  seedDefaultUsers(db);
+export async function initSchema() {
+  if (!connectionString) throw new Error("DATABASE_URL belum diset");
+  if (process.env.RUN_MIGRATIONS === "1") {
+    const migrationClient = postgres(process.env.DIRECT_URL ?? connectionString, { ssl: "require", max: 1 });
+    await migrate(db, { migrationsFolder: "drizzle" });
+    await migrationClient.end();
+  }
+  await seedIfEmpty(db);
+  await seedDefaultUsers(db);
 }
 
 let initialized = false;
-export function ensureDb() {
+export async function ensureDb() {
   if (!initialized && !globalForDb._ovoraSeed) {
     globalForDb._ovoraSeed = true;
-    initSchema();
+    await initSchema();
     initialized = true;
   }
   return db;
 }
 
-export { db, sqlite };
+export { db };
 
 export default db;

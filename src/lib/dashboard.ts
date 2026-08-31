@@ -78,20 +78,19 @@ export function buildTrend(
   return trend;
 }
 
-export function getDashboardData(db: DB, range: DashboardRange, now: Date) {
+export async function getDashboardData(db: DB, range: DashboardRange, now: Date) {
   const { from, to } = rangeBounds(range, now);
   const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate());
 
-  const txnRows = db
+  const txnRows = await db
     .select({
       total: transactions.total,
       createdAt: transactions.createdAt,
     })
     .from(transactions)
-    .where(gte(transactions.createdAt, from.toISOString()))
-    .all();
+    .where(gte(transactions.createdAt, from.toISOString()));
 
-  const expenseRows = db
+  const expenseRows = await db
     .select({
       amount: financialTransactions.amount,
       createdAt: financialTransactions.createdAt,
@@ -102,8 +101,7 @@ export function getDashboardData(db: DB, range: DashboardRange, now: Date) {
         eq(financialTransactions.type, "pengeluaran"),
         between(financialTransactions.createdAt, from.toISOString(), to.toISOString())
       )
-    )
-    .all();
+    );
 
   const sales = txnRows.reduce((sum, r) => sum + r.total, 0);
   const expenses = expenseRows.reduce((sum, r) => sum + r.amount, 0);

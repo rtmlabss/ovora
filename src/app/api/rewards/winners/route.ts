@@ -40,13 +40,12 @@ export async function POST(request: Request) {
     );
   }
 
-  const db = ensureDb();
+  const db = await ensureDb();
 
-  const known = db
+  const known = await db
     .select({ id: members.id, name: members.name })
     .from(members)
-    .where(inArray(members.id, ids))
-    .all();
+    .where(inArray(members.id, ids));
   if (known.length !== ids.length) {
     return NextResponse.json({ error: "Terdapat member yang tidak ditemukan" }, { status: 404 });
   }
@@ -54,38 +53,35 @@ export async function POST(request: Request) {
 
   const rewardTitle = typeof title === "string" && title.trim() ? title.trim() : `Reward ${period}`;
 
-  const existing = db
+  const existing = await db
     .select({ id: rewards.id })
     .from(rewards)
-    .where(eq(rewards.period, period))
-    .all();
+    .where(eq(rewards.period, period));
 
   let rewardId: number;
   if (existing.length > 0) {
     rewardId = existing[0].id;
-    db.update(rewards)
+    await db.update(rewards)
       .set({ title: rewardTitle })
-      .where(eq(rewards.id, rewardId))
-      .run();
+      .where(eq(rewards.id, rewardId));
   } else {
-    rewardId = db
+    const inserted = await db
       .insert(rewards)
       .values({ period, title: rewardTitle, createdAt: new Date().toISOString() })
-      .returning({ id: rewards.id })
-      .get().id;
+      .returning({ id: rewards.id });
+    rewardId = inserted[0].id;
   }
 
   const now = new Date().toISOString();
-  db.delete(rewardWinners).where(eq(rewardWinners.rewardId, rewardId)).run();
-  db.insert(rewardWinners)
+  await db.delete(rewardWinners).where(eq(rewardWinners.rewardId, rewardId));
+  await db.insert(rewardWinners)
     .values(ids.map((memberId, index) => ({
       rewardId,
       memberId,
       rank: index + 1,
       status: "dijadwalkan",
       createdAt: now,
-    })))
-    .run();
+    })));
 
   return NextResponse.json(
     {

@@ -38,7 +38,7 @@ export async function GET(request: Request) {
   }
 
   const periodRange = monthRange(period);
-  const db = ensureDb();
+  const db = await ensureDb();
 
   const conditions = [
     eq(pointMovements.kind, "perolehan"),
@@ -49,7 +49,7 @@ export async function GET(request: Request) {
     conditions.push(eq(pointMovements.branchId, branchId));
   }
 
-  const rows = db
+  const rows = await db
     .select({
       memberId: pointMovements.memberId,
       memberName: members.name,
@@ -61,8 +61,7 @@ export async function GET(request: Request) {
     .where(and(...conditions))
     .groupBy(pointMovements.memberId)
     .orderBy(desc(sql`COALESCE(SUM(${pointMovements.points}), 0)`))
-    .limit(limit)
-    .all();
+    .limit(limit);
 
   const result = rows.map((row, index) => ({
     rank: index + 1,

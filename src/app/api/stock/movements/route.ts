@@ -9,7 +9,7 @@ type MovementType = "masuk" | "keluar";
 
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
-  const db = ensureDb();
+  const db = await ensureDb();
 
   const type = searchParams.get("type");
   const branchId = searchParams.get("branchId");
@@ -34,7 +34,7 @@ export async function GET(request: Request) {
 
   const limitNum = Math.min(Math.max(Number(limit) || 100, 1), 500);
 
-  const rows = db
+  const rows = await db
     .select({
       id: stockMovements.id,
       branchId: stockMovements.branchId,
@@ -50,8 +50,7 @@ export async function GET(request: Request) {
     .leftJoin(products, eq(stockMovements.productId, products.id))
     .where(conditions.length ? conditions.reduce((a, c) => a && c) : undefined)
     .orderBy(desc(stockMovements.createdAt), desc(stockMovements.id))
-    .limit(limitNum)
-    .all();
+    .limit(limitNum);
 
   return NextResponse.json({ count: rows.length, movements: rows });
 }
@@ -90,17 +89,14 @@ export async function POST(request: Request) {
   }
 
   const branchIdNum = Number(branchId);
-  const db = ensureDb();
+  const db = await ensureDb();
   const moveType = type as MovementType;
 
   try {
-    const result = db.transaction(() => {
+    const result = await db.transaction(async (tx) => {
       const branch = Number.isInteger(branchIdNum) && branchIdNum > 0 ? branchIdNum : 1;
-      const product = db
-        .select()
-        .from(products)
-        .where(eq(products.id, productIdNum))
-        .get();
+      const productRows = await tx.select().from(products).where(eq(products.id, productIdNum)).limit(1);
+      const product = productRows[0];
 
       if (!product || product.branchId !== branch) {
         throw Object.assign(new Error("Produk tidak ditemukan pada cabang ini"), {
@@ -116,14 +112,14 @@ export async function POST(request: Request) {
       }
 
       const delta = moveType === "masuk" ? qtyNum : -qtyNum;
-      const updated = db
+      const updatedRows = await tx
         .update(products)
         .set({ stockQty: sql`${products.stockQty} + ${delta}` })
         .where(eq(products.id, productIdNum))
-        .returning()
-        .get();
+        .returning();
+      const updated = updatedRows[0];
 
-      const movement = db
+      const movementRows = await tx
         .insert(stockMovements)
         .values({
           branchId: branch,
@@ -133,8 +129,8 @@ export async function POST(request: Request) {
           note: typeof note === "string" && note.trim() ? note.trim() : null,
           createdAt: createdAt ?? new Date().toISOString(),
         })
-        .returning()
-        .get();
+        .returning();
+      const movement = movementRows[0];
 
       return { movement, product: updated };
     });

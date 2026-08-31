@@ -8,7 +8,7 @@ export const dynamic = "force-dynamic";
 
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
-  const db = ensureDb();
+  const db = await ensureDb();
 
   const type = searchParams.get("type");
   const category = searchParams.get("category");
@@ -41,13 +41,12 @@ export async function GET(request: Request) {
 
   const limitNum = Math.min(Math.max(Number(limit) || 100, 1), 500);
 
-  const rows = db
+  const rows = await db
     .select()
     .from(financialTransactions)
     .where(conditions.length ? conditions.reduce((acc, c) => acc && c) : undefined)
     .orderBy(desc(financialTransactions.createdAt), asc(financialTransactions.id))
-    .limit(limitNum)
-    .all();
+    .limit(limitNum);
 
   return NextResponse.json({ count: rows.length, financialTransactions: rows });
 }
@@ -89,21 +88,22 @@ export async function POST(request: Request) {
     );
   }
 
-  const db = ensureDb();
+  const db = await ensureDb();
 
   const branchIdNum = Number(branchId);
-  const row = db
-    .insert(financialTransactions)
-    .values({
-      branchId: Number.isInteger(branchIdNum) && branchIdNum > 0 ? branchIdNum : 1,
-      type: type as CashType,
-      category,
-      amount: amountNum,
-      note: typeof note === "string" && note.trim() ? note.trim() : null,
-      createdAt: createdAt ?? new Date().toISOString(),
-    })
-    .returning()
-    .get();
+  const row = (
+    await db
+      .insert(financialTransactions)
+      .values({
+        branchId: Number.isInteger(branchIdNum) && branchIdNum > 0 ? branchIdNum : 1,
+        type: type as CashType,
+        category,
+        amount: amountNum,
+        note: typeof note === "string" && note.trim() ? note.trim() : null,
+        createdAt: createdAt ?? new Date().toISOString(),
+      })
+      .returning()
+  )[0];
 
   return NextResponse.json({ financialTransaction: row }, { status: 201 });
 }

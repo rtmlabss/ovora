@@ -15,14 +15,15 @@ export async function GET(
     return NextResponse.json({ error: "branchId tidak valid" }, { status: 400 });
   }
 
-  const db = ensureDb();
+  const db = await ensureDb();
 
-  const branch = db.select().from(branches).where(eq(branches.id, branchId)).get();
+  const branchRows = await db.select().from(branches).where(eq(branches.id, branchId)).limit(1);
+  const branch = branchRows[0];
   if (!branch) {
     return NextResponse.json({ error: "Cabang tidak ditemukan" }, { status: 404 });
   }
 
-  const rows = db
+  const rows = await db
     .select({
       productId: products.id,
       productName: products.name,
@@ -33,11 +34,10 @@ export async function GET(
     })
     .from(branchStocks)
     .innerJoin(products, eq(products.id, branchStocks.productId))
-    .where(eq(branchStocks.branchId, branchId))
-    .all();
+    .where(eq(branchStocks.branchId, branchId));
 
   if (rows.length === 0) {
-    const fallback = db
+    const fallback = await db
       .select({
         id: products.id,
         name: products.name,
@@ -48,10 +48,9 @@ export async function GET(
         branchId: products.branchId,
       })
       .from(products)
-      .where(eq(products.branchId, branchId))
-      .all();
+      .where(eq(products.branchId, branchId));
     if (fallback.length === 0) {
-      const allProducts = db
+      const allProducts = await db
         .select({
           id: products.id,
           name: products.name,
@@ -61,8 +60,7 @@ export async function GET(
           minStock: products.minStock,
         })
         .from(products)
-        .limit(50)
-        .all();
+        .limit(50);
       return NextResponse.json({
         branch: { id: branch.id, name: branch.name, city: branch.city, status: branch.status },
         stocks: allProducts.map((p) => ({

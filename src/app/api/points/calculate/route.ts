@@ -9,7 +9,7 @@ export const dynamic = "force-dynamic";
 
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
-  const db = ensureDb();
+  const db = await ensureDb();
 
   const subtotal = Number(searchParams.get("subtotal"));
   if (!Number.isFinite(subtotal) || subtotal < 0) {
@@ -25,7 +25,8 @@ export async function GET(request: Request) {
   const memberParam = searchParams.get("memberId");
   const memberNum = Number(memberParam);
   if (memberParam && memberParam.trim() !== "" && Number.isInteger(memberNum) && memberNum > 0) {
-    const row = db.select().from(members).where(eq(members.id, memberNum)).get();
+    const rows = await db.select().from(members).where(eq(members.id, memberNum)).limit(1);
+    const row = rows[0];
     if (!row) {
       return NextResponse.json({ error: "Member tidak ditemukan" }, { status: 404 });
     }

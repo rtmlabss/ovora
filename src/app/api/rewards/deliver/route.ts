@@ -44,32 +44,31 @@ export async function POST(request: Request) {
 
   const noteText = note === undefined || note === null ? null : String(note).slice(0, 500);
 
-  const db = ensureDb();
+  const db = await ensureDb();
 
-  const existing = db
+  const existing = await db
     .select({ id: rewardWinners.id })
     .from(rewardWinners)
-    .where(and(eq(rewardWinners.rewardId, rId), eq(rewardWinners.memberId, mId)))
-    .all();
+    .where(and(eq(rewardWinners.rewardId, rId), eq(rewardWinners.memberId, mId)));
   if (existing.length === 0) {
     return NextResponse.json({ error: "Pemenang pada reward ini tidak ditemukan" }, { status: 404 });
   }
 
   const winnerId = existing[0].id;
-  db.update(rewardWinners)
+  await db.update(rewardWinners)
     .set({
       status: newStatus,
       deliveredDate: date,
       note: noteText,
     })
-    .where(eq(rewardWinners.id, winnerId))
-    .run();
+    .where(eq(rewardWinners.id, winnerId));
 
-  const member = db
+  const memberRows = await db
     .select({ id: members.id, name: members.name })
     .from(members)
     .where(eq(members.id, mId))
-    .get();
+    .limit(1);
+  const member = memberRows[0];
 
   return NextResponse.json({
     rewardId: rId,
