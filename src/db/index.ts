@@ -5,20 +5,34 @@ import * as schema from "@/db/schema";
 import { seedDefaultUsers, seedIfEmpty } from "@/db/seed";
 import type { DB } from "@/db/type";
 
-const globalForDb = globalThis as unknown as { _ovoraClient?: postgres.Sql; _ovoraSeed?: boolean };
+type Sql = postgres.Sql;
 
-const connectionString = process.env.DATABASE_URL;
+const globalForDb = globalThis as unknown as {
+  _ovoraClient?: Sql;
+  _ovoraSeed?: boolean;
+};
 
-const client = globalForDb._ovoraClient
-  ?? postgres(connectionString!, { ssl: "require", max: 10 });
-if (process.env.NODE_ENV !== "production") globalForDb._ovoraClient = client;
+function getClient(): Sql {
+  const connectionString = process.env.DATABASE_URL;
+  if (!connectionString) throw new Error("DATABASE_URL belum diset");
+  if (!globalForDb._ovoraClient) {
+    globalForDb._ovoraClient = postgres(connectionString, { ssl: "require", max: 10 });
+  }
+  return globalForDb._ovoraClient;
+}
 
-const db = (drizzle(client, { schema }) as unknown) as DB;
+export function getDb(): DB {
+  return (drizzle(getClient(), { schema }) as unknown) as DB;
+}
 
 export async function initSchema() {
-  if (!connectionString) throw new Error("DATABASE_URL belum diset");
+  if (!process.env.DATABASE_URL) throw new Error("DATABASE_URL belum diset");
+  const db = getDb();
   if (process.env.RUN_MIGRATIONS === "1") {
-    const migrationClient = postgres(process.env.DIRECT_URL ?? connectionString, { ssl: "require", max: 1 });
+    const migrationClient = postgres(process.env.DIRECT_URL ?? process.env.DATABASE_URL, {
+      ssl: "require",
+      max: 1,
+    });
     await migrate(db, { migrationsFolder: "drizzle" });
     await migrationClient.end();
   }
@@ -27,15 +41,11 @@ export async function initSchema() {
 }
 
 let initialized = false;
-export async function ensureDb() {
+export async function ensureDb(): Promise<DB> {
   if (!initialized && !globalForDb._ovoraSeed) {
     globalForDb._ovoraSeed = true;
     await initSchema();
     initialized = true;
   }
-  return db;
+  return getDb();
 }
-
-export { db };
-
-export default db;
