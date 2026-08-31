@@ -34,3 +34,5 @@
 
 # typescript
 *.tsbuildinfo
+.vercel
+.env*
