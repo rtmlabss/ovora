@@ -1,25 +1,47 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { CategorySelect } from "@/components/keuangan/category-select";
 import { CheckIcon, TrendingDownIcon } from "@/components/icons";
-import { MOCK_EXPENSE_ENTRIES, type CashEntry } from "@/lib/keuangan";
+import { type CashEntry } from "@/lib/keuangan";
 import { rupiah } from "@/lib/pos";
 
 export function ExpenseEntryForm() {
   const [category, setCategory] = useState("");
   const [amount, setAmount] = useState("");
   const [note, setNote] = useState("");
-  const [entries, setEntries] = useState<CashEntry[]>(MOCK_EXPENSE_ENTRIES);
+  const [entries, setEntries] = useState<CashEntry[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [saved, setSaved] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    fetch("/api/finances?type=pengeluaran&limit=5")
+      .then((res) => res.json())
+      .then((d) => {
+        if (cancelled) return;
+        if (Array.isArray(d?.financialTransactions)) setEntries(d.financialTransactions);
+        else setLoadError("Gagal memuat pengeluaran.");
+      })
+      .catch(() => {
+        if (!cancelled) setLoadError("Tidak dapat terhubung ke server.");
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   const total = useMemo(
     () => entries.reduce((sum, entry) => sum + entry.amount, 0),
     [entries]
   );
 
-  function handleSubmit(event: React.FormEvent) {
+  async function handleSubmit(event: React.FormEvent) {
     event.preventDefault();
     const parsedAmount = Number(amount);
     if (!category) {
@@ -30,24 +52,35 @@ export function ExpenseEntryForm() {
       setError("Jumlah pengeluaran harus lebih dari 0");
       return;
     }
-    const nextId = Math.max(0, ...entries.map((e) => e.id)) + 1;
-    setEntries((prev) => [
-      {
-        id: nextId,
-        type: "pengeluaran",
-        category,
-        amount: parsedAmount,
-        note: note.trim(),
-        createdAt: new Date().toISOString(),
-      },
-      ...prev,
-    ]);
-    setCategory("");
-    setAmount("");
-    setNote("");
     setError(null);
-    setSaved(`Pengeluaran ${rupiah.format(parsedAmount)} untuk "${category}" tercatat (contoh)`);
-    window.setTimeout(() => setSaved(null), 4000);
+    try {
+      const res = await fetch("/api/finances", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          type: "pengeluaran",
+          category,
+          amount: parsedAmount,
+          note: note.trim(),
+          branchId: 1,
+        }),
+      });
+      const d = await res.json();
+      if (!res.ok) {
+        setError(d?.error ?? "Gagal menyimpan pengeluaran.");
+        return;
+      }
+      if (d?.financialTransaction) {
+        setEntries((prev) => [d.financialTransaction, ...prev].slice(0, 5));
+      }
+      setCategory("");
+      setAmount("");
+      setNote("");
+      setSaved(`Pengeluaran ${rupiah.format(parsedAmount)} untuk "${category}" tercatat`);
+      window.setTimeout(() => setSaved(null), 4000);
+    } catch {
+      setError("Tidak dapat terhubung ke server.");
+    }
   }
 
   return (
@@ -106,7 +139,11 @@ export function ExpenseEntryForm() {
           </p>
           <p className="text-xs font-semibold text-error">{rupiah.format(total)}</p>
         </div>
-        {entries.length === 0 ? (
+        {loading ? (
+          <p className="mt-2 text-xs text-muted-foreground">Memuat…</p>
+        ) : loadError ? (
+          <p className="mt-2 text-xs text-error">{loadError}</p>
+        ) : entries.length === 0 ? (
           <p className="mt-2 text-xs text-muted-foreground">Belum ada pengeluaran tercatat</p>
         ) : (
           <ul className="mt-2 space-y-2">
@@ -128,9 +165,11 @@ export function ExpenseEntryForm() {
             ))}
           </ul>
         )}
-        <p className="mt-2 text-[11px] text-muted-foreground">
-          Tampilan memakai data tiruan sampai API pencatatan selesai.
-        </p>
+        {!loading && !loadError ? (
+          <p className="mt-2 text-[11px] text-muted-foreground">
+            Pengeluaran tersimpan ke database.
+          </p>
+        ) : null}
       </div>
     </div>
   );

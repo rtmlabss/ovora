@@ -8,7 +8,7 @@ import {
   QrIcon,
   SearchIcon,
 } from "@/components/icons";
-import { ALL_CATEGORIES, MOCK_CASH_ENTRIES, MOCK_EXPENSE_ENTRIES } from "@/lib/keuangan";
+import { ALL_CATEGORIES } from "@/lib/keuangan";
 import { rupiah } from "@/lib/pos";
 
 interface TxItem {
@@ -39,9 +39,17 @@ interface UnifiedEntry {
   title: string;
   note: string;
   amount: number;
-  isMock: boolean;
   createdAt: string;
   invoice?: { invoiceNo: string; paymentMethod: string; subtotal: number; items: TxItem[] };
+}
+
+interface ApiFinancial {
+  id: number;
+  type: "pemasukan" | "pengeluaran";
+  category: string;
+  amount: number;
+  note: string | null;
+  createdAt: string;
 }
 
 type Phase = "semua" | "7hari" | "30hari";
@@ -88,6 +96,7 @@ function formatTime(iso: string) {
 
 export function TransactionHistory() {
   const [rows, setRows] = useState<TxRow[]>([]);
+  const [finances, setFinances] = useState<ApiFinancial[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [phase, setPhase] = useState<Phase>("semua");
@@ -97,14 +106,20 @@ export function TransactionHistory() {
 
   useEffect(() => {
     let cancelled = false;
-    fetch("/api/transactions?limit=100")
-      .then((res) => {
+    Promise.all([
+      fetch("/api/transactions?limit=200").then((res) => {
         if (!res.ok) throw new Error("Gagal memuat riwayat keuangan");
         return res.json();
-      })
-      .then((json) => {
+      }),
+      fetch("/api/finances?limit=200").then((res) => {
+        if (!res.ok) throw new Error("Gagal memuat pencatatan keuangan");
+        return res.json();
+      }),
+    ])
+      .then(([txJson, finJson]) => {
         if (cancelled) return;
-        setRows(json.transactions ?? []);
+        setRows(txJson.transactions ?? []);
+        setFinances(finJson.financialTransactions ?? []);
         setError(null);
       })
       .catch((err: Error) => {
@@ -129,7 +144,6 @@ export function TransactionHistory() {
         title: row.invoiceNo,
         note: `${summary}${extra}${row.memberName ? ` • ${row.memberName}` : ""}`,
         amount: row.total,
-        isMock: false,
         createdAt: row.createdAt,
         invoice: {
           invoiceNo: row.invoiceNo,
@@ -139,32 +153,19 @@ export function TransactionHistory() {
         },
       };
     });
-    const mocks: UnifiedEntry[] = [
-      ...MOCK_CASH_ENTRIES.map((e) => ({
-        key: `mock-${e.id}`,
-        kind: e.type,
-        category: e.category,
-        title: e.category,
-        note: e.note || "Tanpa catatan",
-        amount: e.amount,
-        isMock: true,
-        createdAt: e.createdAt,
-      })),
-      ...MOCK_EXPENSE_ENTRIES.map((e) => ({
-        key: `mock-${e.id}`,
-        kind: e.type,
-        category: e.category,
-        title: e.category,
-        note: e.note || "Tanpa catatan",
-        amount: e.amount,
-        isMock: true,
-        createdAt: e.createdAt,
-      })),
-    ];
-    return [...sales, ...mocks].sort(
+    const financial: UnifiedEntry[] = finances.map((e) => ({
+      key: `fin-${e.id}`,
+      kind: e.type,
+      category: e.category,
+      title: e.category,
+      note: e.note || "Tanpa catatan",
+      amount: e.amount,
+      createdAt: e.createdAt,
+    }));
+    return [...sales, ...financial].sort(
       (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
     );
-  }, [rows]);
+  }, [rows, finances]);
 
   const visible = useMemo(() => {
     const daysAgo = phase === "7hari" ? 7 : phase === "30hari" ? 30 : null;
@@ -295,11 +296,6 @@ export function TransactionHistory() {
                         >
                           {METHOD_META[entry.invoice.paymentMethod]?.icon}
                           {METHOD_META[entry.invoice.paymentMethod]?.label ?? "Tunai"}
-                        </span>
-                      ) : null}
-                      {entry.isMock ? (
-                        <span className="rounded-md bg-secondary/10 px-2 py-0.5 text-[10px] font-semibold text-secondary">
-                          contoh
                         </span>
                       ) : null}
                       <span className="font-mono text-sm font-semibold text-foreground">
