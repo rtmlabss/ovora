@@ -59,7 +59,7 @@ export async function GET(request: Request) {
     .from(pointMovements)
     .innerJoin(members, eq(members.id, pointMovements.memberId))
     .where(and(...conditions))
-    .groupBy(pointMovements.memberId)
+    .groupBy(pointMovements.memberId, members.name, pointMovements.branchId)
     .orderBy(desc(sql`COALESCE(SUM(${pointMovements.points}), 0)`))
     .limit(limit);
 
