@@ -1,57 +1,51 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import { RangeFilter, type RangeValue } from "@/components/range-filter";
 import { SalesTrendChart, type TrendPoint } from "@/components/sales-trend-chart";
-import { TodaySummary } from "@/components/today-summary";
+import { TodaySummary, type TodaySummaryData } from "@/components/today-summary";
 import { CalendarIcon, CartIcon, ChevronRightIcon, WalletIcon } from "@/components/icons";
 
-const TREND_BY_RANGE: Record<
-  RangeValue,
-  { subtitle: string; data: TrendPoint[] }
-> = {
-  Harian: {
-    subtitle: "Pendapatan 7 hari terakhir",
-    data: [
-      { label: "Sen 24", value: 980_000 },
-      { label: "Sel 25", value: 1_150_000 },
-      { label: "Rab 26", value: 860_000 },
-      { label: "Kam 27", value: 1_320_000 },
-      { label: "Jum 28", value: 1_540_000 },
-      { label: "Sab 29", value: 1_480_000 },
-      { label: "Min 30", value: 1_250_000 },
-    ],
-  },
-  Mingguan: {
-    subtitle: "Pendapatan 4 minggu terakhir",
-    data: [
-      { label: "W1", value: 6_400_000 },
-      { label: "W2", value: 7_150_000 },
-      { label: "W3", value: 6_880_000 },
-      { label: "W4", value: 8_100_000 },
-    ],
-  },
-  Bulanan: {
-    subtitle: "Pendapatan 6 bulan terakhir",
-    data: [
-      { label: "Mar", value: 27_500_000 },
-      { label: "Apr", value: 29_800_000 },
-      { label: "Mei", value: 28_400_000 },
-      { label: "Jun", value: 31_200_000 },
-      { label: "Jul", value: 33_600_000 },
-      { label: "Agu", value: 30_900_000 },
-    ],
-  },
-  Tahunan: {
-    subtitle: "Pendapatan 3 tahun terakhir",
-    data: [
-      { label: "2024", value: 268_000_000 },
-      { label: "2025", value: 342_000_000 },
-      { label: "2026", value: 391_500_000 },
-    ],
-  },
+const RANGE_API_MAP: Record<RangeValue, string> = {
+  Harian: "daily",
+  Mingguan: "weekly",
+  Bulanan: "monthly",
+  Tahunan: "yearly",
 };
+
+const SUBTITLE_BY_RANGE: Record<RangeValue, string> = {
+  Harian: "Pendapatan hari ini",
+  Mingguan: "Pendapatan 7 hari terakhir",
+  Bulanan: "Pendapatan bulan ini",
+  Tahunan: "Pendapatan tahun ini",
+};
+
+interface ApiSummary {
+  today: { sales: number; expenses: number; profit: number; orders: number };
+  summary: { sales: number; expenses: number; profit: number; orders: number };
+  trend: { label: string; sales: number }[];
+}
+
+function buildTodaySummary(today: ApiSummary["today"]): TodaySummaryData {
+  return {
+    penjualan: {
+      amount: today.sales,
+      helper: `${today.orders} transaksi hari ini`,
+      changePct: 0,
+    },
+    pengeluaran: {
+      amount: today.expenses,
+      helper: "Pengeluaran hari ini",
+      changePct: 0,
+    },
+    laba: {
+      amount: today.profit,
+      helper: "Penjualan dikurangi pengeluaran",
+      changePct: 0,
+    },
+  };
+}
 
 const QUICK_ACTIONS = [
   {
@@ -79,7 +73,32 @@ const QUICK_ACTIONS = [
 
 export function DashboardReport() {
   const [range, setRange] = useState<RangeValue>("Harian");
-  const { subtitle, data } = TREND_BY_RANGE[range];
+  const [summary, setSummary] = useState<ApiSummary | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    setError(null);
+    fetch(`/api/dashboard/summary?range=${RANGE_API_MAP[range]}`)
+      .then((r) => r.json())
+      .then((d) => {
+        if (cancelled) return;
+        if (d?.trend && Array.isArray(d?.trend)) setSummary(d);
+        else setError("Gagal memuat data dashboard.");
+      })
+      .catch(() => {
+        if (!cancelled) setError("Tidak dapat terhubung ke server.");
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [range]);
+
+  const subtitle = SUBTITLE_BY_RANGE[range];
+  const trendData: TrendPoint[] = summary
+    ? summary.trend.map((t) => ({ label: t.label, value: t.sales }))
+    : [];
+  const todayData = summary ? buildTodaySummary(summary.today) : undefined;
 
   return (
     <>
@@ -87,7 +106,7 @@ export function DashboardReport() {
         <h2 className="mb-3 text-sm font-semibold uppercase tracking-wider text-muted-foreground">
           Ringkasan Hari Ini
         </h2>
-        <TodaySummary />
+        <TodaySummary data={todayData} />
       </section>
 
       <section
@@ -101,24 +120,56 @@ export function DashboardReport() {
             </h2>
             <p className="mt-1 text-xs text-muted-foreground">{subtitle}</p>
           </div>
+          <RangeFilter value={range} onChange={setRange} />
         </div>
         <div className="mt-4">
-          <SalesTrendChart data={data} />
+          {error ? (
+            <p className="py-8 text-center text-sm text-error">{error}</p>
+          ) : trendData.length === 0 ? (
+            <div className="h-40 animate-pulse rounded-lg bg-muted" />
+          ) : trendData.every((t) => t.value === 0) ? (
+            <p className="py-8 text-center text-sm text-muted-foreground">
+              Belum ada data penjualan pada rentang ini.
+            </p>
+          ) : (
+            <SalesTrendChart data={trendData} />
+          )}
         </div>
       </section>
 
       <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
         <section
-          aria-label="Filter rentang waktu"
+          aria-label="Ringkasan periode"
           className="rounded-xl border border-border bg-card p-4 shadow-sm"
         >
           <h2 className="mb-3 text-base font-semibold text-foreground">
-            Rentang Waktu
+            Ringkasan Periode
           </h2>
           <p className="mb-3 text-xs text-muted-foreground">
-            Pilih periode laporan harian, mingguan, bulanan, atau tahunan.
+            Total pendapatan, pengeluaran, dan laba pada rentang terpilih.
           </p>
-          <RangeFilter value={range} onChange={setRange} />
+          {summary ? (
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+              {[
+                { label: "Penjualan", value: summary.summary?.sales ?? 0 },
+                { label: "Pengeluaran", value: summary.summary?.expenses ?? 0 },
+                { label: "Laba", value: summary.summary?.profit ?? 0 },
+              ].map((s) => (
+                <div key={s.label} className="rounded-lg border border-border bg-background p-3">
+                  <p className="text-xs text-muted-foreground">{s.label}</p>
+                  <p className="mt-1 text-lg font-bold text-foreground">
+                    {new Intl.NumberFormat("id-ID", {
+                      style: "currency",
+                      currency: "IDR",
+                      maximumFractionDigits: 0,
+                    }).format(s.value)}
+                  </p>
+                </div>
+              ))}
+            </div>
+          ) : (
+            !error && <div className="h-24 animate-pulse rounded-lg bg-muted" />
+          )}
         </section>
 
         <section
