@@ -1,12 +1,22 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { SearchIcon, TrendingDownIcon, TrendingUpIcon } from "@/components/icons";
-import { MOCK_STOCK_IN, MOCK_STOCK_OUT, type StockMoveType } from "@/lib/stok";
-import type { Product } from "@/lib/pos";
-import { PRODUCT_STUB } from "@/lib/pos";
+import type { StockMoveType, StockMovement } from "@/lib/stok";
 
 type MoveFilter = "semua" | StockMoveType;
+
+interface ApiMovement {
+  id: number;
+  branchId: number;
+  productId: number;
+  productName: string | null;
+  productUnit: string | null;
+  type: StockMoveType;
+  qty: number;
+  note: string | null;
+  createdAt: string;
+}
 
 const FILTERS: { value: MoveFilter; label: string }[] = [
   { value: "semua", label: "Semua" },
@@ -30,17 +40,49 @@ function formatTime(iso: string) {
   });
 }
 
-const QUANTITY_UNITS: Record<string, { unit: string }> = {};
-for (const product of PRODUCT_STUB) {
-  QUANTITY_UNITS[product.name] = { unit: product.unit };
-}
-
 export function StockMovementsLog() {
   const [filter, setFilter] = useState<MoveFilter>("semua");
   const [query, setQuery] = useState("");
+  const [entries, setEntries] = useState<StockMovement[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    setLoading(true);
+    fetch("/api/stock/movements?branchId=1&limit=100")
+      .then((res) => {
+        if (!res.ok) throw new Error("Gagal memuat riwayat stok");
+        return res.json();
+      })
+      .then((json) => {
+        if (cancelled) return;
+        const movements = (json.movements ?? []).map((m: ApiMovement) => ({
+          id: m.id,
+          productId: m.productId,
+          productName: m.productName ?? "Produk",
+          type: m.type,
+          qty: m.qty,
+          note: m.note ?? "",
+          createdAt: m.createdAt,
+          unit: m.productUnit ?? "",
+        }));
+        setEntries(movements);
+        setError(null);
+      })
+      .catch((err: Error) => {
+        if (!cancelled) setError(err.message);
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   const visible = useMemo(() => {
-    const all = [...MOCK_STOCK_IN, ...MOCK_STOCK_OUT].sort(
+    const all = [...entries].sort(
       (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
     );
     const q = query.trim().toLowerCase();
@@ -49,7 +91,7 @@ export function StockMovementsLog() {
       if (q && !move.productName.toLowerCase().includes(q)) return false;
       return true;
     });
-  }, [filter, query]);
+  }, [entries, filter, query]);
 
   return (
     <section
@@ -98,7 +140,15 @@ export function StockMovementsLog() {
         </div>
       </div>
 
-      {visible.length === 0 ? (
+      {loading ? (
+        <div className="space-y-2">
+          {[0, 1, 2].map((i) => (
+            <div key={i} className="h-12 animate-pulse rounded-lg bg-muted/30" />
+          ))}
+        </div>
+      ) : error ? (
+        <p className="rounded-lg bg-error/10 px-3 py-2 text-sm text-error">{error}</p>
+      ) : visible.length === 0 ? (
         <div className="rounded-lg bg-muted/20 py-10 text-center">
           <p className="text-sm text-muted-foreground">Belum ada mutasi stok yang cocok</p>
         </div>
@@ -117,7 +167,7 @@ export function StockMovementsLog() {
             <tbody>
               {visible.map((move) => {
                 const isIn = move.type === "masuk";
-                const unit = QUANTITY_UNITS[move.productName]?.unit ?? "";
+                const unit = move.unit ?? "";
                 return (
                   <tr
                     key={move.id}
@@ -164,7 +214,7 @@ export function StockMovementsLog() {
         </div>
       )}
       <p className="mt-2 text-[11px] text-muted-foreground">
-        Tampilan memakai data tiruan sampai API mutasi stok selesai.
+        Riwayat mutasi stok dari database.
       </p>
     </section>
   );

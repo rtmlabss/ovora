@@ -64,7 +64,7 @@ export function ReceiptModal({
           <div className="space-y-0.5">
             <div className="flex justify-between">
               <span>No. Struk</span>
-              <span>#{tx.id.toString().slice(-6)}</span>
+              <span>{tx.invoiceNo || `#${tx.id.toString().slice(-6)}`}</span>
             </div>
             <div className="flex justify-between">
               <span>Tanggal</span>

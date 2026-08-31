@@ -1,32 +1,67 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import { PercentIcon, StarIcon } from "@/components/icons";
-import { memberTier, MOCK_MEMBERS } from "@/lib/membership";
+import { memberTier, type Member } from "@/lib/membership";
 import { POINT_VALUE, rupiah } from "@/lib/pos";
 
 const EARN_RATE = 1000;
 
+interface ApiMember {
+  id: number;
+  name: string;
+  pointsBalance: number;
+}
+
 export function PointCalculator() {
-  const [memberId, setMemberId] = useState<number>(MOCK_MEMBERS[0].id);
+  const [members, setMembers] = useState<Member[]>([]);
+  const [memberId, setMemberId] = useState<number>(0);
   const [subtotal, setSubtotal] = useState("");
   const [redeemPoints, setRedeemPoints] = useState("");
 
-  const member = MOCK_MEMBERS.find((m) => m.id === memberId)!;
-  const tier = memberTier(member.points);
+  useEffect(() => {
+    let cancelled = false;
+    fetch("/api/members?branchId=1")
+      .then((res) => {
+        if (!res.ok) throw new Error("Gagal memuat member");
+        return res.json();
+      })
+      .then((json) => {
+        if (cancelled) return;
+        const list: Member[] = (json.members ?? []).map((m: ApiMember) => ({
+          id: m.id,
+          name: m.name,
+          phone: "",
+          email: "",
+          points: m.pointsBalance ?? 0,
+        }));
+        setMembers(list);
+        if (list.length > 0) setMemberId(list[0].id);
+      })
+      .catch(() => {
+        if (!cancelled) setMembers([]);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const member = members.find((m) => m.id === memberId) ?? null;
+  const tier = member ? memberTier(member.points) : null;
 
   const subtotalNum = Number(subtotal) || 0;
   const earned = Math.floor(subtotalNum / EARN_RATE);
 
   const requested = Number(redeemPoints);
+  const memberPoints = member?.points ?? 0;
   const capByBalance = Math.min(
     Number.isFinite(requested) && requested > 0 ? requested : 0,
-    member.points
+    memberPoints
   );
   const discountRaw = capByBalance * POINT_VALUE;
   const discount = Math.min(discountRaw, subtotalNum);
   const total = subtotalNum - discount;
-  const remaining = member.points - capByBalance;
+  const remaining = memberPoints - capByBalance;
 
   return (
     <div className="rounded-xl border border-border bg-card p-4 shadow-sm">
@@ -52,11 +87,15 @@ export function PointCalculator() {
               }}
               className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm outline-none focus:border-primary"
             >
-              {MOCK_MEMBERS.map((m) => (
-                <option key={m.id} value={m.id}>
-                  {m.name} — {m.points.toLocaleString("id-ID")} poin
-                </option>
-              ))}
+              {members.length === 0 ? (
+                <option value={0}>Belum ada member</option>
+              ) : (
+                members.map((m) => (
+                  <option key={m.id} value={m.id}>
+                    {m.name} — {m.points.toLocaleString("id-ID")} poin
+                  </option>
+                ))
+              )}
             </select>
           </div>
           <div>
@@ -88,10 +127,10 @@ export function PointCalculator() {
               <p className="text-xs text-muted-foreground">Saldo member</p>
               <p className="mt-1 text-lg font-bold text-warning">
                 <StarIcon width={15} height={15} className="mr-1 inline-block" />
-                {member.points.toLocaleString("id-ID")}
+                {memberPoints.toLocaleString("id-ID")}
               </p>
               <p className="text-[11px] text-muted-foreground">
-                Tier {tier.label} · sisa {remaining.toLocaleString("id-ID")}
+                Tier {tier?.label ?? "-"} · sisa {remaining.toLocaleString("id-ID")}
               </p>
             </div>
           </div>
@@ -105,15 +144,15 @@ export function PointCalculator() {
             <input
               type="number"
               min="0"
-              max={member.points}
+              max={memberPoints}
               value={redeemPoints}
               onChange={(e) => setRedeemPoints(e.target.value)}
-              placeholder={`Maks ${member.points.toLocaleString("id-ID")}`}
+              placeholder={`Maks ${memberPoints.toLocaleString("id-ID")}`}
               className="w-full rounded-lg border border-border px-3 py-2 text-sm outline-none placeholder:text-muted-foreground focus:border-primary"
             />
-            {capByBalance > 0 && Number(redeemPoints) > member.points ? (
+            {capByBalance > 0 && Number(redeemPoints) > memberPoints ? (
               <p className="mt-1 text-xs text-error">
-                Melebihi saldo — dibatasi {member.points.toLocaleString("id-ID")} poin
+                Melebihi saldo — dibatasi {memberPoints.toLocaleString("id-ID")} poin
               </p>
             ) : null}
           </div>
@@ -135,7 +174,7 @@ export function PointCalculator() {
             </p>
           </div>
           <p className="text-[11px] text-muted-foreground">
-            Kalkulasi memakai data tiruan sampai transaksi POS terhubung ke API poin.
+            Kalkulasi memakai saldo poin member dari database.
           </p>
         </div>
       </div>

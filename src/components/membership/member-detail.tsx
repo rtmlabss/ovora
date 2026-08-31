@@ -1,8 +1,18 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import { CalendarIcon, MailIcon, StarIcon, WhatsAppIcon, XIcon } from "@/components/icons";
-import { memberTier, MOCK_POINT_HISTORY, type Member } from "@/lib/membership";
+import { memberTier, type Member, type PointHistoryEntry } from "@/lib/membership";
 import { rupiah } from "@/lib/pos";
+
+interface ApiMovement {
+  id: number;
+  memberId: number;
+  kind: "perolehan" | "penukaran";
+  points: number;
+  note: string | null;
+  createdAt: string;
+}
 
 export function MemberDetail({
   member,
@@ -12,7 +22,38 @@ export function MemberDetail({
   onClose: () => void;
 }) {
   const tier = memberTier(member.points);
-  const history = MOCK_POINT_HISTORY.filter((h) => h.memberId === member.id);
+  const [history, setHistory] = useState<PointHistoryEntry[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    let cancelled = false;
+    setLoading(true);
+    fetch(`/api/points/movements?memberId=${member.id}&limit=50`)
+      .then((res) => (res.ok ? res.json() : Promise.reject()))
+      .then((json) => {
+        if (cancelled) return;
+        const movements: PointHistoryEntry[] = (json.pointMovements ?? []).map(
+          (m: ApiMovement) => ({
+            id: m.id,
+            memberId: m.memberId,
+            kind: m.kind,
+            points: m.points,
+            note: m.note ?? "",
+            createdAt: m.createdAt,
+          })
+        );
+        setHistory(movements);
+      })
+      .catch(() => {
+        if (!cancelled) setHistory([]);
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [member.id]);
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
@@ -20,13 +61,7 @@ export function MemberDetail({
         <div className="flex items-start justify-between gap-3">
           <div>
             <p className="text-base font-bold text-foreground">{member.name}</p>
-            <p className="text-sm text-muted-foreground">
-              Terdaftar sejak {new Date(member.joinedAt).toLocaleDateString("id-ID", {
-                day: "numeric",
-                month: "long",
-                year: "numeric",
-              })}
-            </p>
+            <p className="text-sm text-muted-foreground">Member aktif</p>
           </div>
           <button
             type="button"
@@ -84,7 +119,13 @@ export function MemberDetail({
             <CalendarIcon width={15} height={15} />
             Riwayat Poin
           </h3>
-          {history.length === 0 ? (
+          {loading ? (
+            <div className="mt-2 space-y-2">
+              {[0, 1, 2].map((i) => (
+                <div key={i} className="h-12 animate-pulse rounded-lg bg-muted/30" />
+              ))}
+            </div>
+          ) : history.length === 0 ? (
             <p className="mt-2 rounded-lg bg-muted/20 py-4 text-center text-sm text-muted-foreground">
               Belum ada riwayat poin untuk member ini
             </p>
@@ -127,7 +168,7 @@ export function MemberDetail({
         </div>
 
         <p className="mt-3 text-[11px] text-muted-foreground">
-          Riwayat memakai data tiruan sampai API riwayat poin selesai.
+          Riwayat poin dari database.
         </p>
       </div>
     </div>

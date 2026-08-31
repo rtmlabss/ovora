@@ -4,7 +4,7 @@ export interface Member {
   phone: string;
   email: string;
   points: number;
-  joinedAt: string;
+  joinedAt?: string;
 }
 
 export const MOCK_MEMBERS: Member[] = [

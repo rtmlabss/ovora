@@ -1,10 +1,8 @@
 "use client";
 
-import { useState, type ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import {
-  MEMBER_STUB,
   POINT_VALUE,
-  PRODUCT_STUB,
   rupiah,
   type Product,
 } from "@/lib/pos";
@@ -24,6 +22,14 @@ import {
   UsersIcon,
 } from "@/components/icons";
 
+interface MemberOption {
+  id: number;
+  name: string;
+  points: number;
+}
+
+const BRANCH_ID = 1;
+
 export interface CartLine {
   product: Product;
   qty: number;
@@ -31,12 +37,14 @@ export interface CartLine {
 
 export interface CompletedTransaction {
   id: number;
+  invoiceNo: string;
   time: string;
   items: CartLine[];
   subtotal: number;
   discount: number;
   pointsUsed: number;
   pointsDiscount: number;
+  pointsEarned: number;
   total: number;
   method: PayMethod;
   paid: number;
@@ -54,8 +62,10 @@ const methods: { id: PayMethod; label: string; icon: ReactNode }[] = [
   { id: "transfer", label: "Transfer", icon: <UsersIcon width={16} height={16} /> },
 ];
 
-export function SalesWorkbench({ products = PRODUCT_STUB }: { products?: Product[] }) {
+export function SalesWorkbench() {
   const [items, setItems] = useState<CartLine[]>([]);
+  const [products, setProducts] = useState<Product[]>([]);
+  const [members, setMembers] = useState<MemberOption[]>([]);
   const [memberId, setMemberId] = useState<number>(0);
   const [discount, setDiscount] = useState(0);
   const [pointsUsed, setPointsUsed] = useState(0);
@@ -68,8 +78,43 @@ export function SalesWorkbench({ products = PRODUCT_STUB }: { products?: Product
 
   const [lastTx, setLastTx] = useState<CompletedTransaction | null>(null);
   const [receiptOpen, setReceiptOpen] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [submitError, setSubmitError] = useState<string | null>(null);
 
-  const member = MEMBER_STUB.find((m) => m.id === memberId) ?? null;
+  useEffect(() => {
+    let cancelled = false;
+    Promise.all([
+      fetch(`/api/products?branchId=${BRANCH_ID}`).then((res) => {
+        if (!res.ok) throw new Error("Gagal memuat produk");
+        return res.json();
+      }),
+      fetch(`/api/members?branchId=${BRANCH_ID}`).then((res) => {
+        if (!res.ok) throw new Error("Gagal memuat member");
+        return res.json();
+      }),
+    ])
+      .then(([productJson, memberJson]) => {
+        if (cancelled) return;
+        setProducts(productJson.products ?? []);
+        setMembers(
+          (memberJson.members ?? []).map((m: { id: number; name: string; pointsBalance?: number }) => ({
+            id: m.id,
+            name: m.name,
+            points: m.pointsBalance ?? 0,
+          }))
+        );
+        setLoadError(null);
+      })
+      .catch((err: Error) => {
+        if (!cancelled) setLoadError(err.message);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const member = members.find((m) => m.id === memberId) ?? null;
 
   const subtotal = items.reduce((sum, line) => sum + line.product.price * line.qty, 0);
   const pointsDiscount = pointsUsed * POINT_VALUE;
@@ -130,28 +175,57 @@ export function SalesWorkbench({ products = PRODUCT_STUB }: { products?: Product
     setPaymentOpen(true);
   };
 
-  const completePayment = () => {
-    const tx: CompletedTransaction = {
-      id: Date.now(),
-      time: new Date().toLocaleString("id-ID"),
-      items,
-      subtotal,
-      discount,
-      pointsUsed,
-      pointsDiscount,
-      total,
-      method,
-      paid: method === "tunai" ? paid : total,
-      change: cashChange,
-      memberName: member?.name,
-    };
-    setLastTx(tx);
-    setItems([]);
-    setDiscount(0);
-    setPointsUsed(0);
-    setMemberId(0);
-    setPaymentOpen(false);
-    setPaid(0);
+  const completePayment = async () => {
+    setSubmitError(null);
+    setSubmitting(true);
+    try {
+      const res = await fetch("/api/transactions", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          branchId: BRANCH_ID,
+          memberId: memberId || null,
+          subtotal,
+          discount,
+          pointsUsed,
+          total,
+          paymentMethod: method,
+          items: items.map((line) => ({ productId: line.product.id, qty: line.qty })),
+        }),
+      });
+      const json = await res.json();
+      if (!res.ok) {
+        throw new Error(json.error ?? "Gagal menyimpan transaksi");
+      }
+      const t = json.transaction;
+      const tx: CompletedTransaction = {
+        id: t.id,
+        invoiceNo: t.invoiceNo,
+        time: new Date().toLocaleString("id-ID"),
+        items,
+        subtotal: t.subtotal,
+        discount: t.discount,
+        pointsUsed: t.pointsUsed,
+        pointsDiscount: t.pointsDiscount,
+        pointsEarned: t.pointsEarned ?? 0,
+        total: t.total,
+        method,
+        paid: method === "tunai" ? paid : t.total,
+        change: cashChange,
+        memberName: member?.name,
+      };
+      setLastTx(tx);
+      setItems([]);
+      setDiscount(0);
+      setPointsUsed(0);
+      setMemberId(0);
+      setPaymentOpen(false);
+      setPaid(0);
+    } catch (err) {
+      setSubmitError(err instanceof Error ? err.message : "Terjadi kesalahan");
+    } finally {
+      setSubmitting(false);
+    }
   };
 
   const canCheckout = items.length > 0;
@@ -159,7 +233,17 @@ export function SalesWorkbench({ products = PRODUCT_STUB }: { products?: Product
   return (
     <div className="space-y-6">
       <div className="grid grid-cols-1 gap-5 lg:grid-cols-[1fr_380px]">
-        <ProductBrowser products={products} onSelect={add} />
+        {loadError ? (
+          <div className="rounded-xl border border-border bg-card p-4 text-sm text-error shadow-sm">
+            {loadError}
+          </div>
+        ) : products.length === 0 ? (
+          <div className="rounded-xl border border-border bg-card p-8 text-center text-sm text-muted-foreground shadow-sm">
+            Memuat data produk…
+          </div>
+        ) : (
+          <ProductBrowser products={products} onSelect={add} />
+        )}
 
         <aside
           aria-label="Keranjang transaksi"
@@ -192,7 +276,7 @@ export function SalesWorkbench({ products = PRODUCT_STUB }: { products?: Product
               className="w-full rounded-lg border border-input bg-card px-3 py-2 text-sm text-foreground focus:border-ring focus:outline-none"
             >
               <option value={0}>-- Tanpa member --</option>
-              {MEMBER_STUB.map((m) => (
+              {members.map((m) => (
                 <option key={m.id} value={m.id}>
                   {m.name} ({m.points} poin)
                 </option>
@@ -456,11 +540,14 @@ export function SalesWorkbench({ products = PRODUCT_STUB }: { products?: Product
               </span>
               <div>
                 <h2 className="text-base font-semibold text-foreground">
-                  Transaksi #{lastTx.id.toString().slice(-6)} selesai
+                  {lastTx.invoiceNo} selesai
                 </h2>
                 <p className="mt-1 text-xs text-muted-foreground">
                   {lastTx.time} · {methodLabel(lastTx.method)} ·{" "}
                   {lastTx.memberName ?? "Tanpa member"}
+                  {lastTx.pointsEarned > 0
+                    ? ` · +${lastTx.pointsEarned} poin diperoleh`
+                    : ""}
                 </p>
               </div>
             </div>
@@ -649,21 +736,27 @@ export function SalesWorkbench({ products = PRODUCT_STUB }: { products?: Product
             <div className="flex gap-3 border-t border-border px-5 py-4">
               <button
                 type="button"
+                disabled={submitting}
                 onClick={() => setPaymentOpen(false)}
-                className="flex-1 rounded-lg border border-border px-4 py-2.5 text-sm font-medium text-muted-foreground hover:bg-muted"
+                className="flex-1 rounded-lg border border-border px-4 py-2.5 text-sm font-medium text-muted-foreground hover:bg-muted disabled:opacity-40"
               >
                 Batal
               </button>
               <button
                 type="button"
-                disabled={!paidCovers}
+                disabled={!paidCovers || submitting}
                 onClick={completePayment}
                 className="flex flex-1 items-center justify-center gap-1.5 rounded-lg bg-primary px-4 py-2.5 text-sm font-semibold text-primary-foreground hover:bg-primary/90 disabled:opacity-40"
               >
                 <CheckIcon width={16} height={16} />
-                Bayar & Selesai
+                {submitting ? "Menyimpan…" : "Bayar & Selesai"}
               </button>
             </div>
+            {submitError ? (
+              <p className="border-t border-border bg-error/5 px-5 py-2 text-xs font-medium text-error">
+                {submitError}
+              </p>
+            ) : null}
           </div>
         </div>
       )}

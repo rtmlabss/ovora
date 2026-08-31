@@ -1,26 +1,26 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useState } from "react";
 import { CheckIcon, TrendingDownIcon } from "@/components/icons";
-import { MOCK_STOCK_OUT, type StockMovement } from "@/lib/stok";
-import { PRODUCT_STUB } from "@/lib/pos";
+import type { Product } from "@/lib/pos";
 
-export function StockOutForm() {
+export function StockOutForm({
+  products,
+  onChange,
+}: {
+  products: Product[];
+  onChange?: () => void;
+}) {
   const [productId, setProductId] = useState<number | "">("");
   const [qty, setQty] = useState("");
   const [note, setNote] = useState("");
-  const [entries, setEntries] = useState<StockMovement[]>(MOCK_STOCK_OUT);
   const [error, setError] = useState<string | null>(null);
   const [msg, setMsg] = useState<string | null>(null);
+  const [saving, setSaving] = useState(false);
 
-  const totalQty = useMemo(
-    () => entries.reduce((sum, entry) => sum + entry.qty, 0),
-    [entries]
-  );
-
-  function handleSubmit(event: React.FormEvent) {
+  async function handleSubmit(event: React.FormEvent) {
     event.preventDefault();
-    const product = PRODUCT_STUB.find((p) => p.id === productId);
+    const product = products.find((p) => p.id === productId);
     const parsedQty = Number(qty);
     if (!product) {
       setError("Pilih produk terlebih dahulu");
@@ -34,25 +34,35 @@ export function StockOutForm() {
       setError(`Stok ${product.name} hanya ${product.stockQty} ${product.unit}`);
       return;
     }
-    const nextId = Math.max(0, ...entries.map((e) => e.id)) + 1;
-    setEntries((prev) => [
-      {
-        id: nextId,
-        productId: product.id,
-        productName: product.name,
-        type: "keluar",
-        qty: parsedQty,
-        note: note.trim(),
-        createdAt: new Date().toISOString(),
-      },
-      ...prev,
-    ]);
-    setProductId("");
-    setQty("");
-    setNote("");
+    setSaving(true);
     setError(null);
-    setMsg(`${parsedQty} ${product.unit} "${product.name}" dicatat keluar (contoh)`);
-    window.setTimeout(() => setMsg(null), 4000);
+    try {
+      const res = await fetch("/api/stock/movements", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          productId: product.id,
+          type: "keluar",
+          qty: parsedQty,
+          note: note.trim(),
+          branchId: 1,
+        }),
+      });
+      const json = await res.json();
+      if (!res.ok) {
+        throw new Error(json.error ?? "Gagal mencatat stok keluar");
+      }
+      setProductId("");
+      setQty("");
+      setNote("");
+      setMsg(`${parsedQty} ${product.unit} "${product.name}" dicatat keluar`);
+      onChange?.();
+      window.setTimeout(() => setMsg(null), 4000);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Terjadi kesalahan");
+    } finally {
+      setSaving(false);
+    }
   }
 
   return (
@@ -73,9 +83,9 @@ export function StockOutForm() {
             className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm text-foreground outline-none transition-colors focus:border-primary"
           >
             <option value="">-- Pilih Produk --</option>
-            {PRODUCT_STUB.map((product) => (
+            {products.map((product) => (
               <option key={product.id} value={product.id}>
-                {product.name}
+                {product.name} ({product.stockQty} {product.unit})
               </option>
             ))}
           </select>
@@ -112,47 +122,12 @@ export function StockOutForm() {
         ) : null}
         <button
           type="submit"
-          className="w-full rounded-lg bg-error px-3 py-2 text-sm font-medium text-error-foreground transition-colors hover:bg-error/90"
+          disabled={saving}
+          className="w-full rounded-lg bg-error px-3 py-2 text-sm font-medium text-error-foreground transition-colors hover:bg-error/90 disabled:opacity-40"
         >
-          Simpan Stok Keluar
+          {saving ? "Menyimpan…" : "Simpan Stok Keluar"}
         </button>
       </form>
-
-      <div className="mt-4 border-t border-border pt-3">
-        <div className="flex items-center justify-between">
-          <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-            Riwayat Stok Keluar
-          </p>
-          <p className="text-xs font-semibold text-error">
-            {totalQty.toLocaleString("id-ID")} unit
-          </p>
-        </div>
-        {entries.length === 0 ? (
-          <p className="mt-2 text-xs text-muted-foreground">Belum ada stok keluar tercatat</p>
-        ) : (
-          <ul className="mt-2 space-y-2">
-            {entries.slice(0, 6).map((entry) => (
-              <li
-                key={entry.id}
-                className="flex items-center justify-between gap-2 rounded-lg bg-muted/20 px-3 py-2"
-              >
-                <div className="min-w-0">
-                  <p className="truncate text-sm font-medium text-foreground">{entry.productName}</p>
-                  <p className="truncate text-xs text-muted-foreground">
-                    {entry.note || "Tanpa catatan"}
-                  </p>
-                </div>
-                <p className="shrink-0 text-sm font-bold text-error">
-                  -{entry.qty.toLocaleString("id-ID")}
-                </p>
-              </li>
-            ))}
-          </ul>
-        )}
-        <p className="mt-2 text-[11px] text-muted-foreground">
-          Tampilan memakai data tiruan sampai API stok selesai.
-        </p>
-      </div>
     </div>
   );
 }

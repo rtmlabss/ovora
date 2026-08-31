@@ -12,8 +12,9 @@ export function MemberAddForm({ onAdd }: { onAdd: (member: Member) => void }) {
   const [points, setPoints] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [msg, setMsg] = useState<string | null>(null);
+  const [saving, setSaving] = useState(false);
 
-  function handleSubmit(event: React.FormEvent) {
+  async function handleSubmit(event: React.FormEvent) {
     event.preventDefault();
     if (!name.trim()) {
       setError("Nama member wajib diisi");
@@ -29,22 +30,45 @@ export function MemberAddForm({ onAdd }: { onAdd: (member: Member) => void }) {
       return;
     }
 
-    onAdd({
-      id: Date.now(),
-      name: name.trim(),
-      phone: phone.trim(),
-      email: email.trim() || "-",
-      points: points === "" ? 0 : pointsNum,
-      joinedAt: new Date().toISOString().slice(0, 10),
-    });
-
-    setName("");
-    setPhone("");
-    setEmail("");
-    setPoints("");
+    setSaving(true);
     setError(null);
-    setMsg(`Member "${name.trim()}" berhasil ditambahkan (contoh)`);
-    window.setTimeout(() => setMsg(null), 4000);
+    try {
+      const res = await fetch("/api/members", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: name.trim(),
+          phone: phone.trim(),
+          email: email.trim() || undefined,
+          initialPoints: points === "" ? 0 : pointsNum,
+          branchId: 1,
+        }),
+      });
+      const json = await res.json();
+      if (!res.ok) {
+        throw new Error(json.error ?? "Gagal menambah member");
+      }
+      const m = json.member;
+      onAdd({
+        id: m.id,
+        name: m.name,
+        phone: m.phone ?? "-",
+        email: m.email ?? "-",
+        points: m.pointsBalance ?? 0,
+        joinedAt: new Date().toISOString().slice(0, 10),
+      });
+
+      setName("");
+      setPhone("");
+      setEmail("");
+      setPoints("");
+      setMsg(`Member "${name.trim()}" berhasil ditambahkan`);
+      window.setTimeout(() => setMsg(null), 4000);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Terjadi kesalahan");
+    } finally {
+      setSaving(false);
+    }
   }
 
   return (
@@ -118,14 +142,12 @@ export function MemberAddForm({ onAdd }: { onAdd: (member: Member) => void }) {
         ) : null}
         <button
           type="submit"
-          className="w-full rounded-lg bg-primary px-3 py-2 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90"
+          disabled={saving}
+          className="w-full rounded-lg bg-primary px-3 py-2 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90 disabled:opacity-40"
         >
-          Simpan Member
+          {saving ? "Menyimpan…" : "Simpan Member"}
         </button>
       </form>
-      <p className="mt-3 text-[11px] text-muted-foreground">
-        Menyimpan dalam memori (contoh) sampai API member selesai.
-      </p>
     </div>
   );
 }

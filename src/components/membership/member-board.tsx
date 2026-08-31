@@ -1,21 +1,57 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { ChevronRightIcon, SearchIcon, StarIcon, UsersIcon } from "@/components/icons";
 import { MemberAddForm } from "@/components/membership/member-add-form";
 import { MemberDetail } from "@/components/membership/member-detail";
-import { memberTier, MOCK_MEMBERS, type Member } from "@/lib/membership";
+import { memberTier, type Member } from "@/lib/membership";
 import { rupiah } from "@/lib/pos";
 
+interface ApiMember {
+  id: number;
+  name: string;
+  phone: string | null;
+  email: string | null;
+  pointsBalance: number;
+}
+
 export function MemberBoard() {
-  const [members, setMembers] = useState<Member[]>(MOCK_MEMBERS);
+  const [members, setMembers] = useState<Member[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const [query, setQuery] = useState("");
   const [selectedId, setSelectedId] = useState<number | null>(null);
 
   const selected = members.find((m) => m.id === selectedId) ?? null;
 
+  function loadMembers() {
+    return fetch("/api/members?branchId=1")
+      .then((res) => {
+        if (!res.ok) throw new Error("Gagal memuat member");
+        return res.json();
+      })
+      .then((json) => {
+        const list: Member[] = (json.members ?? []).map((m: ApiMember) => ({
+          id: m.id,
+          name: m.name,
+          phone: m.phone ?? "-",
+          email: m.email ?? "-",
+          points: m.pointsBalance ?? 0,
+        }));
+        setMembers(list);
+        setError(null);
+      })
+      .catch((err: Error) => setError(err.message))
+      .finally(() => setLoading(false));
+  }
+
+  useEffect(() => {
+    loadMembers();
+  }, []);
+
   function handleAdd(member: Member) {
-    setMembers((prev) => [member, ...prev]);
+    loadMembers();
+    setSelectedId(member.id);
   }
 
   const stats = useMemo(() => {
@@ -83,7 +119,15 @@ export function MemberBoard() {
             </label>
           </div>
 
-          {visible.length === 0 ? (
+          {loading ? (
+            <div className="space-y-2">
+              {[0, 1, 2, 3].map((i) => (
+                <div key={i} className="h-12 animate-pulse rounded-lg bg-muted/30" />
+              ))}
+            </div>
+          ) : error ? (
+            <p className="rounded-lg bg-error/10 px-3 py-2 text-sm text-error">{error}</p>
+          ) : visible.length === 0 ? (
             <div className="rounded-lg bg-muted/20 py-10 text-center">
               <p className="text-sm text-muted-foreground">Tidak ada member yang cocok</p>
             </div>
@@ -111,9 +155,7 @@ export function MemberBoard() {
                       >
                         <td className="py-2.5 pr-3">
                           <p className="font-medium text-foreground">{member.name}</p>
-                          <p className="text-xs text-muted-foreground">
-                            Bergabung {member.joinedAt}
-                          </p>
+                          <p className="text-xs text-muted-foreground">Member aktif</p>
                         </td>
                         <td className="py-2.5 pr-3 text-muted-foreground">
                           <p>{member.phone}</p>
@@ -147,7 +189,7 @@ export function MemberBoard() {
           )}
           <p className="mt-3 flex items-center gap-1.5 text-[11px] text-muted-foreground">
             <UsersIcon width={13} height={13} />
-            Tampilan memakai data tiruan sampai API member selesai.
+            Data member dari database.
           </p>
         </section>
 

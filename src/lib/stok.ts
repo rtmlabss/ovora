@@ -8,6 +8,7 @@ export interface StockMovement {
   qty: number;
   note: string;
   createdAt: string;
+  unit?: string;
 }
 
 export const MOCK_STOCK_IN: StockMovement[] = [

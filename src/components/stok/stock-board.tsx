@@ -1,11 +1,11 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { SearchIcon } from "@/components/icons";
 import { StockInForm } from "@/components/stok/stock-in-form";
 import { StockOutForm } from "@/components/stok/stock-out-form";
 import { StockMovementsLog } from "@/components/stok/stock-movements-log";
-import { PRODUCT_STUB, rupiah, type Product } from "@/lib/pos";
+import { rupiah, type Product } from "@/lib/pos";
 
 type StockLevel = "cukup" | "menipis" | "habis";
 
@@ -22,10 +22,37 @@ const LEVEL_META: Record<StockLevel, { label: string; className: string }> = {
 };
 
 export function StockBoard() {
+  const [products, setProducts] = useState<Product[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const [query, setQuery] = useState("");
-  const [thresholds, setThresholds] = useState<Record<number, number>>(() =>
-    Object.fromEntries(PRODUCT_STUB.map((p) => [p.id, p.minStock]))
-  );
+  const [thresholds, setThresholds] = useState<Record<number, number>>({});
+
+  function loadProducts() {
+    fetch("/api/products?branchId=1")
+      .then((res) => {
+        if (!res.ok) throw new Error("Gagal memuat stok produk");
+        return res.json();
+      })
+      .then((json) => {
+        const list: Product[] = json.products ?? [];
+        setProducts(list);
+        setThresholds((prev) => {
+          const next = { ...prev };
+          for (const p of list) {
+            if (!(p.id in next)) next[p.id] = p.minStock;
+          }
+          return next;
+        });
+        setError(null);
+      })
+      .catch((err: Error) => setError(err.message))
+      .finally(() => setLoading(false));
+  }
+
+  useEffect(() => {
+    loadProducts();
+  }, []);
 
   function updateThreshold(productId: number, raw: string) {
     const value = Number(raw);
@@ -35,23 +62,23 @@ export function StockBoard() {
 
   const levelCounts = useMemo(() => {
     const counts: Record<StockLevel, number> = { cukup: 0, menipis: 0, habis: 0 };
-    for (const product of PRODUCT_STUB) {
-      counts[stockLevel(product, thresholds[product.id])] += 1;
+    for (const product of products) {
+      counts[stockLevel(product, thresholds[product.id] ?? product.minStock)] += 1;
     }
     return counts;
-  }, [thresholds]);
+  }, [products, thresholds]);
 
   const visible = useMemo(() => {
     const q = query.trim().toLowerCase();
-    return PRODUCT_STUB.filter((p) => !q || p.name.toLowerCase().includes(q));
-  }, [query]);
+    return products.filter((p) => !q || p.name.toLowerCase().includes(q));
+  }, [products, query]);
 
   return (
     <div className="space-y-6">
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
         <div className="rounded-xl border border-border bg-card p-4 shadow-sm">
           <p className="text-sm text-muted-foreground">Total Produk</p>
-          <p className="mt-1 text-2xl font-bold text-foreground">{PRODUCT_STUB.length}</p>
+          <p className="mt-1 text-2xl font-bold text-foreground">{products.length}</p>
         </div>
         <div className="rounded-xl border border-border bg-card p-4 shadow-sm">
           <p className="text-sm text-muted-foreground">Stok Menipis</p>
@@ -90,6 +117,19 @@ export function StockBoard() {
               />
             </label>
           </div>
+          {loading ? (
+            <div className="space-y-2">
+              {[0, 1, 2, 3].map((i) => (
+                <div key={i} className="h-12 animate-pulse rounded-lg bg-muted/30" />
+              ))}
+            </div>
+          ) : error ? (
+            <p className="rounded-lg bg-error/10 px-3 py-2 text-sm text-error">{error}</p>
+          ) : products.length === 0 ? (
+            <div className="rounded-lg bg-muted/20 py-10 text-center">
+              <p className="text-sm text-muted-foreground">Belum ada produk tercatat</p>
+            </div>
+          ) : (
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead>
@@ -103,7 +143,7 @@ export function StockBoard() {
               </thead>
               <tbody>
                 {visible.map((product) => {
-                  const minStock = thresholds[product.id];
+                  const minStock = thresholds[product.id] ?? product.minStock;
                   const level = stockLevel(product, minStock);
                   const meta = LEVEL_META[level];
                   return (
@@ -141,11 +181,12 @@ export function StockBoard() {
               </tbody>
             </table>
           </div>
+          )}
         </section>
 
         <div className="space-y-6">
-          <StockInForm />
-          <StockOutForm />
+          <StockInForm products={products} onChange={loadProducts} />
+          <StockOutForm products={products} onChange={loadProducts} />
         </div>
       </div>
 
