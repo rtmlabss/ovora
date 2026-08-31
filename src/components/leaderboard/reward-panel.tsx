@@ -1,10 +1,22 @@
 "use client";
 
-import { useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { GiftIcon } from "@/components/icons";
-import { RewardRecordForm, type RewardRecord } from "@/components/leaderboard/reward-record-form";
+import {
+  RewardRecordForm,
+  type ApiReward,
+  type ApiRewardWinner,
+} from "@/components/leaderboard/reward-record-form";
 
-function RewardRecords({ records }: { records: RewardRecord[] }) {
+function fmtPeriod(period: string) {
+  const [y, m] = period.split("-").map(Number);
+  return new Date(y, m - 1, 1).toLocaleDateString("id-ID", {
+    month: "long",
+    year: "numeric",
+  });
+}
+
+function RewardRecords({ records }: { records: ApiRewardWinner[] }) {
   return (
     <div className="rounded-xl border border-border bg-card p-4 shadow-sm">
       <h3 className="mb-2 flex items-center gap-1.5 text-sm font-semibold text-foreground">
@@ -21,7 +33,7 @@ function RewardRecords({ records }: { records: RewardRecord[] }) {
             <li key={record.id} className="rounded-lg bg-muted/20 px-3 py-2">
               <div className="flex items-center justify-between gap-2">
                 <p className="truncate text-sm font-medium text-foreground">
-                  {record.memberName}
+                  #{record.rank} {record.memberName}
                 </p>
                 <span
                   className={`shrink-0 rounded-md px-1.5 py-0.5 text-[10px] font-semibold ${
@@ -33,9 +45,10 @@ function RewardRecords({ records }: { records: RewardRecord[] }) {
                   {record.status}
                 </span>
               </div>
-              <p className="mt-0.5 truncate text-xs text-muted-foreground">{record.prize}</p>
-              <p className="mt-0.5 text-[11px] text-muted-foreground">
-                {record.periodLabel} · {record.deliveredDate}
+              <p className="mt-0.5 text-xs text-muted-foreground">
+                {record.deliveredDate
+                  ? new Date(record.deliveredDate).toLocaleDateString("id-ID")
+                  : "Belum ada tanggal penyerahan"}
               </p>
             </li>
           ))}
@@ -46,14 +59,32 @@ function RewardRecords({ records }: { records: RewardRecord[] }) {
 }
 
 export function RewardPanel() {
-  const [records, setRecords] = useState<RewardRecord[]>([]);
+  const [rewards, setRewards] = useState<ApiReward[]>([]);
+  const [error, setError] = useState<string | null>(null);
+
+  const load = useCallback(() => {
+    fetch("/api/rewards")
+      .then((res) => (res.ok ? res.json() : Promise.reject()))
+      .then((json) => {
+        setRewards(json.rewards ?? []);
+        setError(null);
+      })
+      .catch(() => setError("Gagal memuat riwayat hadiah"));
+  }, []);
+
+  useEffect(() => {
+    load();
+  }, [load]);
+
+  const allWinners = rewards.flatMap((r) => r.winners);
 
   return (
     <div className="space-y-6">
-      <RewardRecordForm
-        onRecorded={(record) => setRecords((prev) => [record, ...prev])}
-      />
-      <RewardRecords records={records} />
+      {error ? (
+        <p className="rounded-xl bg-error/10 px-4 py-3 text-sm text-error">{error}</p>
+      ) : null}
+      <RewardRecordForm rewards={rewards} onDelivered={load} />
+      <RewardRecords records={allWinners} />
     </div>
   );
 }
