@@ -10,10 +10,12 @@ import {
   EggIcon,
   LayoutIcon,
   LogOutIcon,
+  MenuIcon,
   SettingsIcon,
   TrophyIcon,
   UsersIcon,
   WalletIcon,
+  XIcon,
 } from "@/components/icons";
 
 const NAV_SECTIONS = [
@@ -70,6 +72,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
   const router = useRouter();
   const today = useToday();
   const [role, setRole] = useState<MockRole>("Pemilik");
+  const [sidebarOpen, setSidebarOpen] = useState(false);
 
   const sections = NAV_SECTIONS.filter((section) =>
     section.items.some((item) => item.roles.includes(role))
@@ -77,6 +80,18 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
     ...section,
     items: section.items.filter((item) => item.roles.includes(role)),
   }));
+
+  useEffect(() => {
+    setSidebarOpen(false);
+  }, [pathname]);
+
+  useEffect(() => {
+    function onKey(e: KeyboardEvent) {
+      if (e.key === "Escape") setSidebarOpen(false);
+    }
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  }, []);
 
   function handleLogout() {
     fetch("/api/auth/logout", { method: "POST" })
@@ -87,17 +102,27 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
       });
   }
 
-  return (
-    <div className="flex min-h-screen bg-background text-foreground">
-      <aside className="hidden w-64 shrink-0 flex-col border-r border-border bg-card md:flex">
-        <div className="flex h-16 items-center gap-2.5 border-b border-border px-5">
-          <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-primary text-primary-foreground">
-            <EggIcon width={20} height={20} />
-          </span>
-          <div>
-            <p className="text-base font-bold leading-tight">ovora.id</p>
-            <p className="text-xs text-muted-foreground">Manajemen Toko Telur</p>
+  function SidebarContent({ onNavigate }: { onNavigate?: () => void }) {
+    return (
+      <div className="flex h-full min-h-0 flex-col">
+        <div className="flex h-16 shrink-0 items-center justify-between gap-2.5 border-b border-border px-5">
+          <div className="flex items-center gap-2.5">
+            <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-primary text-primary-foreground">
+              <EggIcon width={20} height={20} />
+            </span>
+            <div>
+              <p className="text-base font-bold leading-tight">ovora.id</p>
+              <p className="text-xs text-muted-foreground">Manajemen Toko Telur</p>
+            </div>
           </div>
+          <button
+            type="button"
+            aria-label="Tutup menu"
+            onClick={() => setSidebarOpen(false)}
+            className="rounded-lg p-1.5 text-muted-foreground hover:bg-muted hover:text-foreground md:hidden"
+          >
+            <XIcon width={18} height={18} />
+          </button>
         </div>
 
         <nav className="flex-1 overflow-y-auto px-3 py-4">
@@ -115,6 +140,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
                     <li key={item.href}>
                       <Link
                         href={item.href}
+                        onClick={onNavigate}
                         aria-current={active ? "page" : undefined}
                         className={`flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-colors ${
                           active
@@ -164,18 +190,51 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
             </select>
           </div>
         </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="flex min-h-screen bg-background text-foreground">
+      <aside className="hidden w-64 shrink-0 flex-col border-r border-border bg-card md:flex">
+        <SidebarContent />
+      </aside>
+
+      {sidebarOpen && (
+        <div
+          className="fixed inset-0 z-40 bg-black/50 backdrop-blur-sm md:hidden"
+          onClick={() => setSidebarOpen(false)}
+          aria-hidden="true"
+        />
+      )}
+
+      <aside
+        className={`fixed inset-y-0 left-0 z-50 flex w-72 max-w-[85vw] flex-col border-r border-border bg-card shadow-xl transition-transform duration-200 md:hidden ${
+          sidebarOpen ? "translate-x-0" : "-translate-x-full"
+        }`}
+        aria-hidden={!sidebarOpen}
+      >
+        <SidebarContent onNavigate={() => setSidebarOpen(false)} />
       </aside>
 
       <div className="flex min-w-0 flex-1 flex-col">
-        <header className="sticky top-0 z-10 flex h-16 items-center justify-between border-b border-border bg-card/80 px-6 backdrop-blur">
+        <header className="sticky top-0 z-10 flex h-16 items-center justify-between border-b border-border bg-card/80 px-4 backdrop-blur md:px-6">
           <div className="flex items-center gap-3">
+            <button
+              type="button"
+              aria-label="Buka menu"
+              onClick={() => setSidebarOpen(true)}
+              className="rounded-lg border border-border p-2 text-foreground hover:bg-muted md:hidden"
+            >
+              <MenuIcon width={18} height={18} />
+            </button>
             <button
               type="button"
               className="rounded-lg border border-border px-3 py-1.5 text-sm font-medium text-foreground"
             >
               Cabang Utama
             </button>
-            <span className="text-xs text-muted-foreground">{today}</span>
+            <span className="hidden text-xs text-muted-foreground sm:inline">{today}</span>
           </div>
           <button
             type="button"
@@ -183,7 +242,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
             className="flex items-center gap-2 rounded-lg px-3 py-1.5 text-sm font-medium text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
           >
             <LogOutIcon width={16} height={16} />
-            Keluar
+            <span className="hidden sm:inline">Keluar</span>
           </button>
         </header>
 
