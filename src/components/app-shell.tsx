@@ -32,14 +32,12 @@ const NAV_SECTIONS = [
       { href: "/stok", label: "Manajemen Stok", icon: BoxIcon, roles: ["Pemilik", "Manager", "Kasir"] },
       { href: "/keuangan", label: "Pencatatan Keuangan", icon: WalletIcon, roles: ["Pemilik", "Manager"] },
       { href: "/membership", label: "Membership & Poin", icon: UsersIcon, roles: ["Pemilik", "Manager"] },
-      { href: "/cabang", label: "Manajemen Cabang", icon: BuildingIcon, roles: ["Pemilik", "Manager"] },
     ],
   },
   {
     title: "Evaluasi",
     items: [
       { href: "/leaderboard", label: "Leaderboard Reward", icon: TrophyIcon, roles: ["Pemilik", "Manager"] },
-      { href: "/cabang", label: "Monitoring Cabang", icon: BuildingIcon, roles: ["Pemilik", "Manager"] },
     ],
   },
   {
