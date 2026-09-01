@@ -17,6 +17,7 @@ import {
   WalletIcon,
   XIcon,
   CameraIcon,
+  ClockIcon,
 } from "@/components/icons";
 
 const NAV_SECTIONS = [
