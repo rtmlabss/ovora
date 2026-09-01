@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import AppShell from "@/components/app-shell";
-import { CameraIcon, CheckIcon, MapPinIcon, MapIcon, UserIcon, ClockIcon } from "@/components/icons";
+import { CameraIcon, CheckIcon, MapPinIcon, MapIcon, UserIcon, ClockIcon, XIcon } from "@/components/icons";
 
 export default function AbsensiPage() {
   const [loading, setLoading] = useState(false);
