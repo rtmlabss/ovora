@@ -1,12 +1,14 @@
 import { and, eq, inArray } from "drizzle-orm";
 import { ensureDb } from "@/db/index";
-import { rolePermissions, roles } from "@/db/schema";
+import { rolePermissions, roles, users } from "@/db/schema";
+import type { NextRequest } from "next/server";
 
 export const dynamic = "force-dynamic";
 
-export async function PATCH(request: Request, { params }: { params: { id: string } }) {
+export async function PATCH(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const db = await ensureDb();
-  const roleId = Number(params.id);
+  const { id: idRaw } = await params;
+  const roleId = Number(idRaw);
   let body: any;
   try {
     body = await request.json();
@@ -42,9 +44,10 @@ export async function PATCH(request: Request, { params }: { params: { id: string
   }
 }
 
-export async function DELETE(request: Request, { params }: { params: { id: string } }) {
+export async function DELETE(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const db = await ensureDb();
-  const roleId = Number(params.id);
+  const { id: idRaw } = await params;
+  const roleId = Number(idRaw);
 
   try {
     // Check if role is used by any user

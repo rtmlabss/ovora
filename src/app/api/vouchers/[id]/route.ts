@@ -1,12 +1,14 @@
 import { and, desc, eq } from "drizzle-orm";
 import { ensureDb } from "@/db/index";
 import { vouchers } from "@/db/schema";
+import type { NextRequest } from "next/server";
 
 export const dynamic = "force-dynamic";
 
-export async function PATCH(request: Request, { params }: { params: { id: string } }) {
+export async function PATCH(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const db = await ensureDb();
-  const id = Number(params.id);
+  const { id: idRaw } = await params;
+  const id = Number(idRaw);
   let body: any;
   try {
     body = await request.json();

@@ -8,7 +8,8 @@ export const dynamic = "force-dynamic";
 
 export async function POST(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const db = await ensureDb();
-  const shiftId = Number(params.id);
+  const { id: idRaw } = await params;
+  const shiftId = Number(idRaw);
   let body: any;
   try {
     body = await request.json();

@@ -11,9 +11,13 @@ export async function GET(request: Request) {
   const branchId = Number(searchParams.get("branchId")) || null;
 
   if (type === "pos") {
-    let query = db.select().from(purchaseOrders).orderBy(desc(purchaseOrders.createdAt));
-    if (branchId) query = query.where(eq(purchaseOrders.branchId, branchId));
-    const rows = await query.limit(100);
+    const filters = branchId ? [eq(purchaseOrders.branchId, branchId)] : [];
+    const rows = await db
+      .select()
+      .from(purchaseOrders)
+      .where(and(...filters))
+      .orderBy(desc(purchaseOrders.createdAt))
+      .limit(100);
 
     const poIds = rows.map((r) => r.id);
     const items = poIds.length

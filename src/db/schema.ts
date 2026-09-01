@@ -224,6 +224,7 @@ export const vouchers = pgTable("vouchers", {
   quota: integer("quota"),
   usedCount: integer("used_count").notNull().default(0),
   status: text("status").notNull().default("aktif"),
+  createdAt: text("created_at").notNull(),
 });
 
 export const auditLogs = pgTable("audit_logs", {

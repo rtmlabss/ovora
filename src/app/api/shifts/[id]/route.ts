@@ -2,12 +2,14 @@ import { and, eq } from "drizzle-orm";
 import { ensureDb } from "@/db/index";
 import { employeeShifts } from "@/db/schema";
 import { logAudit, getClientIp } from "@/lib/audit";
+import type { NextRequest } from "next/server";
 
 export const dynamic = "force-dynamic";
 
-export async function PATCH(request: Request, { params }: { params: { id: string } }) {
+export async function PATCH(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const db = await ensureDb();
-  const shiftId = Number(params.id);
+  const { id: idRaw } = await params;
+  const shiftId = Number(idRaw);
   let body: any;
   try {
     body = await request.json();
@@ -61,9 +63,10 @@ export async function PATCH(request: Request, { params }: { params: { id: string
   }
 }
 
-export async function DELETE(request: Request, { params }: { params: { id: string } }) {
+export async function DELETE(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const db = await ensureDb();
-  const shiftId = Number(params.id);
+  const { id: idRaw } = await params;
+  const shiftId = Number(idRaw);
 
   try {
     const result = await db.transaction(async (tx) => {

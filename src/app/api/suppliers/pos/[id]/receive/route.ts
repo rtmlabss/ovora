@@ -2,12 +2,14 @@ import { and, eq, inArray } from "drizzle-orm";
 import { ensureDb } from "@/db/index";
 import { financialTransactions, products, purchaseOrderItems, purchaseOrders } from "@/db/schema";
 import { logAudit, getClientIp } from "@/lib/audit";
+import type { NextRequest } from "next/server";
 
 export const dynamic = "force-dynamic";
 
-export async function POST(request: Request, { params }: { params: { id: string } }) {
+export async function POST(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const db = await ensureDb();
-  const poId = Number(params.id);
+  const { id: idRaw } = await params;
+  const poId = Number(idRaw);
   let body: any;
   try {
     body = await request.json();

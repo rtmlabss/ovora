@@ -1,4 +1,4 @@
-import { and, desc, eq, gte, inArray, lte, sql, sum as drizzleSum, count as drizzleCount } from "drizzle-orm";
+import { and, desc, eq, gte, gt, inArray, lte, sql, sum as drizzleSum, count as drizzleCount } from "drizzle-orm";
 import { ensureDb } from "@/db/index";
 import { products, transactions, transactionItems, members, financialTransactions, purchaseOrderItems, purchaseOrders, stockMovements } from "@/db/schema";
 
@@ -104,7 +104,7 @@ export async function GET(request: Request) {
     const prods = await db
       .select()
       .from(products)
-      .where(and(eq(products.stockQty > 0), branchId ? eq(products.branchId, branchId) : sql`1=1`));
+      .where(and(gt(products.stockQty, 0), branchId ? eq(products.branchId, branchId) : sql`1=1`));
 
     // Get recent stock movements
     const recentMovements = await db
