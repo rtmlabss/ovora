@@ -40,9 +40,10 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
   }
 }
 
-export async function DELETE(request: Request, { params }: { params: { id: string } }) {
+export async function DELETE(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const db = await ensureDb();
-  const id = Number(params.id);
+  const { id: idRaw } = await params;
+  const id = Number(idRaw);
 
   try {
     await db.delete(vouchers).where(eq(vouchers.id, id));
