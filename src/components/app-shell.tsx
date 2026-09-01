@@ -16,6 +16,7 @@ import {
   UsersIcon,
   WalletIcon,
   XIcon,
+  CameraIcon,
 } from "@/components/icons";
 
 const NAV_SECTIONS = [
@@ -24,6 +25,8 @@ const NAV_SECTIONS = [
     items: [
       { href: "/dashboard", label: "Dashboard Keuangan", icon: LayoutIcon, roles: ["Pemilik", "Manager", "Kasir"] },
       { href: "/kasir", label: "Kasir Penjualan", icon: CartIcon, roles: ["Pemilik", "Manager", "Kasir"] },
+      { href: "/absensi", label: "Absensi Karyawan", icon: CameraIcon, roles: ["Pemilik", "Manager", "Kasir"] },
+      { href: "/absensi/riwayat", label: "Riwayat Absensi", icon: ClockIcon, roles: ["Pemilik", "Manager"] },
     ],
   },
   {

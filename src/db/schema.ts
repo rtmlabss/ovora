@@ -325,3 +325,35 @@ export const creditPayments = pgTable("credit_payments", {
   userId: integer("user_id"),
   createdAt: text("created_at").notNull(),
 });
+
+export const attendances = pgTable("attendances", {
+  id: serial("id").primaryKey(),
+  userId: integer("user_id").notNull(),
+  branchId: integer("branch_id").notNull(),
+  shiftId: integer("shift_id"),
+  type: text("type").notNull(), // masuk, pulang
+  photoUrl: text("photo_url"),
+  selfiePhoto: text("selfie_photo"),
+  latitude: real("latitude"),
+  longitude: real("longitude"),
+  accuracy: real("accuracy"),
+  locationAddress: text("location_address"),
+  timestamp: text("timestamp").notNull(),
+  deviceInfo: text("device_info"),
+  status: text("status").notNull().default("tepat"), // tepat, telat, dini
+  note: text("note"),
+  createdAt: text("created_at").notNull(),
+});
+
+export const employeeShifts = pgTable("employee_shifts", {
+  id: serial("id").primaryKey(),
+  userId: integer("user_id").notNull(),
+  branchId: integer("branch_id").notNull(),
+  shiftName: text("shift_name").notNull(),
+  startTime: text("start_time").notNull(),
+  endTime: text("end_time").notNull(),
+  workDays: text("work_days").notNull(), // JSON array: ["senin", "selasa", ...]
+  status: text("status").notNull().default("aktif"),
+  createdAt: text("created_at").notNull(),
+  updatedAt: text("updated_at").notNull(),
+});

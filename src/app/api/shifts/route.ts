@@ -1,6 +1,6 @@
-import { and, desc, eq, gte, inArray, lte, sum } from "drizzle-orm";
+import { and, desc, eq, gte, inArray, lte } from "drizzle-orm";
 import { ensureDb } from "@/db/index";
-import { cashShifts, financialTransactions, users } from "@/db/schema";
+import { employeeShifts, users } from "@/db/schema";
 import { logAudit, getClientIp } from "@/lib/audit";
 
 export const dynamic = "force-dynamic";
@@ -8,39 +8,35 @@ export const dynamic = "force-dynamic";
 export async function GET(request: Request) {
   const db = await ensureDb();
   const { searchParams } = new URL(request.url);
-  const branchId = Number(searchParams.get("branchId")) || null;
   const userId = Number(searchParams.get("userId")) || null;
+  const branchId = Number(searchParams.get("branchId")) || null;
   const status = searchParams.get("status") || null;
-  const from = searchParams.get("from") || null;
-  const to = searchParams.get("to") || null;
   const limit = Math.min(Math.max(Number(searchParams.get("limit")) || 50, 1), 200);
 
   const filters = [];
-  if (branchId) filters.push(eq(cashShifts.branchId, branchId));
-  if (userId) filters.push(eq(cashShifts.userId, userId));
-  if (status) filters.push(eq(cashShifts.status, status));
-  if (from) filters.push(gte(cashShifts.openedAt, from));
-  if (to) filters.push(lte(cashShifts.openedAt, to));
+  if (userId) filters.push(eq(employeeShifts.userId, userId));
+  if (branchId) filters.push(eq(employeeShifts.branchId, branchId));
+  if (status) filters.push(eq(employeeShifts.status, status));
 
   const rows = await db
     .select()
-    .from(cashShifts)
+    .from(employeeShifts)
     .where(and(...filters))
-    .orderBy(desc(cashShifts.openedAt))
+    .orderBy(desc(employeeShifts.updatedAt))
     .limit(limit);
 
-  const userIds = [...new Set(rows.flatMap((r) => (r.userId != null ? [r.userId] : [])))];
-  const usrs = userIds.length
+  const userIds = [...new Set(rows.map((r) => r.userId))];
+  const usersFound = userIds.length
     ? await db.select().from(users).where(inArray(users.id, userIds))
     : [];
-  const userMap = new Map(usrs.map((u) => [u.id, u.name]));
+  const userMap = new Map(usersFound.map((u) => [u.id, u]));
 
-  const shifts = rows.map((r) => ({
+  const result = rows.map((r) => ({
     ...r,
-    userName: userMap.get(r.userId) ?? null,
+    user: userMap.get(r.userId) ? { id: userMap.get(r.userId)?.id, name: userMap.get(r.userId)?.name } : null,
   }));
 
-  return Response.json({ total: shifts.length, shifts });
+  return Response.json({ total: result.length, shifts: result });
 }
 
 export async function POST(request: Request) {
@@ -52,45 +48,48 @@ export async function POST(request: Request) {
     return Response.json({ error: "Body JSON tidak valid" }, { status: 400 });
   }
 
-  const { userId, branchId, openingCash, note } = body;
-  if (!userId || !branchId) {
-    return Response.json({ error: "userId dan branchId wajib diisi" }, { status: 400 });
+  const { userId, branchId, shiftName, startTime, endTime, workDays } = body;
+  if (!userId || !branchId || !shiftName || !startTime || !endTime || !workDays) {
+    return Response.json({ error: "Data shift tidak lengkap" }, { status: 400 });
   }
 
   try {
-    // Check if user already has open shift
-    const openShift = await db
-      .select()
-      .from(cashShifts)
-      .where(and(eq(cashShifts.userId, userId), eq(cashShifts.status, "open")))
-      .limit(1);
-    if (openShift.length > 0) {
-      return Response.json({ error: "Kasir masih memiliki shift terbuka" }, { status: 400 });
-    }
-
     const now = new Date();
-    const shift = await db
-      .insert(cashShifts)
-      .values({
-        userId,
-        branchId,
-        openingCash: openingCash || 0,
-        status: "open",
-        openedAt: now.toISOString(),
-        note: note || null,
-      })
-      .returning();
+    const timestampStr = now.toISOString();
+
+    const result = await db.transaction(async (tx) => {
+      // Check if user exists
+      const userRows = await tx.select().from(users).where(eq(users.id, userId)).limit(1);
+      if (!userRows[0]) throw new Error("Pengguna tidak ditemukan");
+
+      const rows = await tx
+        .insert(employeeShifts)
+        .values({
+          userId,
+          branchId,
+          shiftName,
+          startTime,
+          endTime,
+          workDays: JSON.stringify(workDays),
+          status: "aktif",
+          createdAt: timestampStr,
+          updatedAt: timestampStr,
+        })
+        .returning();
+
+      return rows[0];
+    });
 
     await logAudit({
       userId,
-      action: "open",
-      module: "cash_shifts",
-      resourceId: String(shift[0].id),
-      newData: { openingCash: shift[0].openingCash },
+      action: "create",
+      module: "employee_shifts",
+      resourceId: String(result.id),
+      newData: { shiftName, startTime, endTime, workDays },
       ipAddress: getClientIp(request),
     });
 
-    return Response.json({ shift: shift[0] }, { status: 201 });
+    return Response.json({ shift: result }, { status: 201 });
   } catch (err: any) {
     return Response.json({ error: err.message }, { status: 400 });
   }
