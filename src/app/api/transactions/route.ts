@@ -1,17 +1,20 @@
 import { and, desc, eq, gte, inArray, lte } from "drizzle-orm";
 import { ensureDb } from "@/db/index";
 import {
+  customerCredits,
   financialTransactions,
   members,
   products,
   transactionItems,
   transactions,
+  vouchers,
 } from "@/db/schema";
 import { POINT_VALUE } from "@/lib/pos";
+import { logAudit, getClientIp } from "@/lib/audit";
 
 export const dynamic = "force-dynamic";
 
-type PayMethod = "tunai" | "qris" | "transfer";
+type PayMethod = "tunai" | "qris" | "transfer" | "kredit";
 
 interface PostSaleItem {
   productId: number;
@@ -23,9 +26,12 @@ interface PostSaleBody {
   memberId?: number | null;
   subtotal?: number;
   discount?: number;
+  tax?: number;
+  serviceCharge?: number;
   pointsUsed?: number;
   total?: number;
   paymentMethod?: PayMethod;
+  voucherCode?: string;
   items: PostSaleItem[];
 }
 
@@ -55,9 +61,14 @@ export async function POST(request: Request) {
   const branchId = body.branchId ?? 1;
   const memberId = body.memberId || null;
   const discount = Math.max(Math.floor(body.discount ?? 0), 0);
+  const tax = Math.max(Math.floor(body.tax ?? 0), 0);
+  const serviceCharge = Math.max(Math.floor(body.serviceCharge ?? 0), 0);
   const requestedPoints = Math.max(Math.floor(body.pointsUsed ?? 0), 0);
   const paymentMethod: PayMethod =
-    body.paymentMethod === "qris" || body.paymentMethod === "transfer" ? body.paymentMethod : "tunai";
+    body.paymentMethod === "qris" || body.paymentMethod === "transfer" || body.paymentMethod === "kredit"
+      ? body.paymentMethod
+      : "tunai";
+  const voucherCode = body.voucherCode?.trim() || null;
 
   try {
     const sale = await db.transaction(async (tx) => {
@@ -82,7 +93,37 @@ export async function POST(request: Request) {
       );
       const safeDiscount = Math.min(discount, subtotal);
 
-      let maxPoints = Math.floor((subtotal - safeDiscount) / POINT_VALUE);
+      // Voucher validation
+      let voucherDiscount = 0;
+      let voucher: (typeof vouchers.$inferSelect) | null = null;
+      if (voucherCode) {
+        const voucherRows = await tx
+          .select()
+          .from(vouchers)
+          .where(and(eq(vouchers.code, voucherCode), eq(vouchers.status, "aktif")))
+          .limit(1);
+        voucher = voucherRows[0] ?? null;
+        if (voucher) {
+          const now = new Date().toISOString();
+          if (voucher.startDate <= now && voucher.endDate >= now) {
+            if (!voucher.quota || voucher.usedCount < voucher.quota) {
+              if (subtotal >= voucher.minPurchase) {
+                if (voucher.type === "percentage") {
+                  voucherDiscount = Math.min(Math.round(subtotal * (voucher.value / 100)), voucher.maxDiscount ?? subtotal);
+                } else {
+                  voucherDiscount = Math.min(voucher.value, subtotal);
+                }
+              }
+            }
+          }
+        }
+      }
+
+      const afterDiscount = subtotal - safeDiscount - voucherDiscount;
+      const taxAmount = Math.round(afterDiscount * (tax / 100));
+      const serviceChargeAmount = Math.round(afterDiscount * (serviceCharge / 100));
+
+      let maxPoints = Math.floor(afterDiscount / POINT_VALUE);
       let member: (typeof members.$inferSelect) | null = null;
       if (memberId) {
         const memberQuery = await tx.select().from(members).where(eq(members.id, memberId)).limit(1);
@@ -93,7 +134,7 @@ export async function POST(request: Request) {
       }
       const pointsUsed = Math.min(requestedPoints, maxPoints);
       const pointsDiscount = pointsUsed * POINT_VALUE;
-      const total = Math.max(subtotal - safeDiscount - pointsDiscount, 0);
+      const total = Math.max(afterDiscount + taxAmount + serviceChargeAmount - pointsDiscount, 0);
 
       const now = new Date();
       const maxRows = await tx.select({ id: transactions.id }).from(transactions).orderBy(desc(transactions.id)).limit(1);
@@ -108,6 +149,8 @@ export async function POST(request: Request) {
           memberId,
           subtotal,
           discount: safeDiscount,
+          tax: taxAmount,
+          serviceCharge: serviceChargeAmount,
           pointsUsed,
           total,
           paymentMethod,
@@ -130,7 +173,7 @@ export async function POST(request: Request) {
           .where(eq(products.id, row.product.id));
       }
 
-      let pointsEarned = 0;
+       let pointsEarned = 0;
       if (member) {
         pointsEarned = Math.floor(total / 1000);
         await tx.update(members)
@@ -138,22 +181,46 @@ export async function POST(request: Request) {
           .where(eq(members.id, member.id));
       }
 
+      // Increment voucher usage count
+      if (voucher && voucherDiscount > 0) {
+        await tx
+          .update(vouchers)
+          .set({ usedCount: voucher.usedCount + 1 })
+          .where(eq(vouchers.id, voucher.id));
+      }
+
+      // Handle credit payment
+      if (paymentMethod === "kredit" && memberId) {
+        const creditRows = await tx.select().from(customerCredits).where(eq(customerCredits.memberId, memberId)).limit(1);
+        const credit = creditRows[0];
+        if (!credit) throw new Error("Member tidak memiliki akun kredit");
+        if (credit.status !== "aktif") throw new Error("Akun kredit tidak aktif");
+        if (credit.usedCredit + total > credit.creditLimit) throw new Error("Melebihi batas kredit");
+
+        await tx.update(customerCredits)
+          .set({ usedCredit: credit.usedCredit + total, updatedAt: now.toISOString() })
+          .where(eq(customerCredits.memberId, memberId));
+      }
+
       await tx.insert(financialTransactions)
         .values({
           branchId,
-          type: "pemasukan",
-          category: "Penjualan",
+          type: paymentMethod === "kredit" ? "piutang" : "pemasukan",
+          category: paymentMethod === "kredit" ? "Piutang Pelanggan" : "Penjualan",
           amount: total,
           note: `Transaksi ${invoiceNo}`,
           transactionId: txn.id,
           createdAt: now.toISOString(),
         });
 
-      return {
+      const result = {
         id: txn.id,
         invoiceNo: txn.invoiceNo,
         subtotal,
         discount: safeDiscount,
+        voucherDiscount,
+        tax: taxAmount,
+        serviceCharge: serviceChargeAmount,
         pointsUsed,
         pointsDiscount,
         pointsEarned,
@@ -172,6 +239,18 @@ export async function POST(request: Request) {
           subtotal: Math.round(r.unitPrice * r.qty),
         })),
       };
+
+      // Log audit
+      await logAudit({
+        userId: null, // TODO: get from auth context
+        action: "create",
+        module: "transactions",
+        resourceId: String(txn.id),
+        newData: result,
+        ipAddress: getClientIp(request),
+      });
+
+      return result;
     });
 
     return Response.json({ transaction: sale }, { status: 201 });
@@ -221,7 +300,7 @@ export async function GET(request: Request) {
     : [];
   const memberMap = new Map(membersFound.map((m) => [m.id, m]));
 
-  const transactionsOut = rows.map((r) => ({
+    const transactionsOut = rows.map((r) => ({
     id: r.id,
     invoiceNo: r.invoiceNo,
     branchId: r.branchId,
@@ -229,6 +308,8 @@ export async function GET(request: Request) {
     memberName: r.memberId != null ? (memberMap.get(r.memberId)?.name ?? null) : null,
     subtotal: r.subtotal,
     discount: r.discount,
+    tax: r.tax,
+    serviceCharge: r.serviceCharge,
     pointsUsed: r.pointsUsed,
     total: r.total,
     paymentMethod: r.paymentMethod,

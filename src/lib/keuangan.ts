@@ -8,12 +8,14 @@ export interface CategoryOption {
 export const INCOME_CATEGORIES: CategoryOption[] = [
   { value: "Penjualan", label: "Penjualan" },
   { value: "Investasi", label: "Investasi" },
+  { value: "Penerimaan PO", label: "Penerimaan PO" },
   { value: "Lain-lain", label: "Lain-lain" },
 ];
 
 export const EXPENSE_CATEGORIES: CategoryOption[] = [
   { value: "Belanja Stok", label: "Belanja Stok" },
   { value: "Gaji Karyawan", label: "Gaji Karyawan" },
+  { value: "Pengiriman Stok", label: "Pengiriman Stok" },
   { value: "Lain-lain", label: "Lain-lain" },
 ];
 

@@ -1,4 +1,4 @@
-export type StockMoveType = "masuk" | "keluar";
+export type StockMoveType = "masuk" | "keluar" | "transfer";
 
 export interface StockMovement {
   id: number;

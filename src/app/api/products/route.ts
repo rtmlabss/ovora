@@ -15,7 +15,8 @@ export async function GET(request: Request) {
     conditions.push(
       or(
         like(products.name, `%${q}%`),
-        like(products.unit, `%${q}%`)
+        like(products.unit, `%${q}%`),
+        like(products.barcode, `%${q}%`)
       )!
     );
   }
@@ -30,6 +31,7 @@ export async function GET(request: Request) {
       price: p.price,
       stockQty: p.stockQty,
       minStock: p.minStock,
+      barcode: p.barcode,
       branchId: p.branchId,
       stockStatus: p.stockQty <= 0 ? "habis" : p.stockQty <= p.minStock ? "menipis" : "cukup",
     })),
