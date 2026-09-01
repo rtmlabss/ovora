@@ -176,16 +176,25 @@ export default function ProfilTokoPage() {
           </section>
 
           <section className="rounded-xl border border-border bg-card p-5 shadow-sm">
-            <div className="mb-4 flex items-center gap-3">
-              <span className="flex h-9 w-9 items-center justify-center rounded-lg bg-primary/10 text-primary">
-                <BuildingIcon width={18} height={18} />
-              </span>
-              <div>
-                <h2 className="text-base font-semibold text-foreground">Cabang Toko</h2>
-                <p className="text-xs text-muted-foreground">
-                  Daftar cabang & status
-                </p>
+            <div className="mb-4 flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <span className="flex h-9 w-9 items-center justify-center rounded-lg bg-primary/10 text-primary">
+                  <BuildingIcon width={18} height={18} />
+                </span>
+                <div>
+                  <h2 className="text-base font-semibold text-foreground">Cabang Toko</h2>
+                  <p className="text-xs text-muted-foreground">
+                    Daftar cabang & status
+                  </p>
+                </div>
               </div>
+              <Link
+                href="/cabang"
+                className="inline-flex items-center gap-1.5 rounded-lg border border-border bg-card px-3 py-1.5 text-sm font-medium text-foreground transition-colors hover:bg-muted"
+              >
+                <ChevronRightIcon width={14} height={14} />
+                Kelola Cabang
+              </Link>
             </div>
 
             <div className="space-y-3">
@@ -227,7 +236,7 @@ export default function ProfilTokoPage() {
             </div>
 
             <p className="mt-4 text-[11px] text-muted-foreground">
-              Daftar cabang dimuat dari database.
+              Daftar cabang dimuat dari database. Klik "Kelola Cabang" untuk menambah, mengedit, atau menghapus cabang.
             </p>
           </section>
         </div>

@@ -23,7 +23,15 @@ export default function PengaturanPage() {
               className="inline-flex items-center gap-1.5 rounded-lg border border-border bg-card px-4 py-2 text-sm font-medium text-foreground transition-colors hover:bg-muted"
             >
               <BuildingIcon width={15} height={15} />
-              Profil & Cabang
+              Profil Toko
+              <ChevronRightIcon width={14} height={14} />
+            </Link>
+            <Link
+              href="/cabang"
+              className="inline-flex items-center gap-1.5 rounded-lg border border-border bg-card px-4 py-2 text-sm font-medium text-foreground transition-colors hover:bg-muted"
+            >
+              <BuildingIcon width={15} height={15} />
+              Manajemen Cabang
               <ChevronRightIcon width={14} height={14} />
             </Link>
             <Link
