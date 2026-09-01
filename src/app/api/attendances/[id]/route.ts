@@ -3,11 +3,15 @@ import { ensureDb } from "@/db/index";
 import { attendances, employeeShifts, users, branches } from "@/db/schema";
 import { logAudit, getClientIp } from "@/lib/audit";
 
+import type { NextRequest } from "next/server";
+
+
 export const dynamic = "force-dynamic";
 
-export async function POST(request: Request, { params }: { params: { id: string } }) {
+export async function POST(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const db = await ensureDb();
-  const attendanceId = Number(params.id);
+  const { id: idRaw } = await params;
+  const attendanceId = Number(idRaw);
   let body: any;
   try {
     body = await request.json();
